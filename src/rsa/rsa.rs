@@ -14,10 +14,14 @@
 
 /// RSA signatures.
 
-use {bits, c, core, der, error};
+use {bits, c, core, der, error, limb};
 use untrusted;
 
 mod padding;
+
+pub const RSA_PUBLIC_KEY_MODULUS_BITS_MAX: usize = 4096;
+pub const RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX: usize =
+    (RSA_PUBLIC_KEY_MODULUS_BITS_MAX + limb::LIMB_BITS - 1) / limb::LIMB_BITS;
 
 // `RSA_PKCS1_SHA1` is intentionally not exposed.
 #[cfg(feature = "rsa_signing")]
@@ -132,6 +136,12 @@ extern {
     fn GFp_BN_MONT_CTX_free(mont: *mut BN_MONT_CTX);
 }
 
+mod blinding;
+
+// Really a private method; only has public visibility so that C compilation
+// can see it.
+#[doc(hidden)]
+pub use rsa::blinding::GFp_rand_mod;
 
 #[cfg(test)]
 mod tests {
