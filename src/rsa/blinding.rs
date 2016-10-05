@@ -18,57 +18,53 @@
 use {c, core, rand, error, rsa};
 use limb::*;
 
+#[allow(non_snake_case)]
+#[doc(hidden)]
+#[no_mangle]
+pub unsafe extern fn GFp_rand_mod(out: *mut Limb, max_exclusive: *const Limb,
+                                  num_limbs: c::size_t, rng: *mut rand::RAND)
+                                  -> c::int {
+    const ERR: c::int = 0;
+    const SUCCESS: c::int = 1;
 
-/// Params which specify the implementation strategy for random sampling from
-/// an interval (0, max).
-struct SamplingParams {
-    // We generate random data to fill a slice of limbs, so if we want a number
-    // of bits which isn't a multiple of LIMB_BITS, we need to mask off some
-    // of the bits in the most significant limb.
-    most_sig_limb_mask: Limb,
+    let max_exclusive = core::slice::from_raw_parts(max_exclusive, num_limbs);
+    let mut out = core::slice::from_raw_parts_mut(out, num_limbs);
 
-    // Assume `x` is of the form `0b100...`. This means:
-    //
-    //    x < 2**n - 2**(n-2) - 2**(n-3).
-    //
-    // This means that `3*x < 2**(n+1)`. Proof:
-    //
-    //  3*x < 3*(2**n - 2**(n-2) - 2**(n-3))
-    //      < (2 + 1)*(2**n - 2**(n-2) - 2**(n-3))
-    //      < 2*(2**n - 2**(n-2) - 2**(n-3)) + 2**n - 2**(n-2) - 2**(n-3)
-    //      < 2**(n+1) - 2**(n-1) - 2**(n-2) + 2**n - 2**(n-2) - 2**(n-3)
-    //      < 2**(n+1) + 2**n - 2**(n-1) - 2**(n-2) - 2**(n-2) - 2**(n-3)
-    //      < 2**(n+1) + 2**n - 2**(n-1) - 2*(2**(n-2)) - 2**(n-3)
-    //      < 2**(n+1) + 2**n - 2**(n-1) - 2**(n-1) - 2**(n-3)
-    //      < 2**(n+1) + 2**n - 2*(2**(n-1)) - 2**(n-3)
-    //      < 2**(n+1) + 2**n - 2**n - 2**(n-3)
-    //      < 2**(n+1) - 2**(n-3)
-    //
-    // Then clearly 2**(n+1) - 2**(n-3) < 2**(n+1) since n is positive.
-    //
-    // This means that when `max` is of the form `0b100...`, we can generate a
-    // value in the range [0, 2**(n+1)), which would fall into one of four
-    // sub-intervals:
-    //
-    //    [0, max)          => Return the value as-is.
-    //    [max, 2*max)      => Return `value - max`.
-    //    [2*max, 3*max)    => Return `value - max - max`.
-    //    [3*max, 2**(n+1)) => Generate a new random value and try again.
-    //
-    // This avoids biasing the result towards small values, which is what
-    // reducing the random value (mod max) would do, while reducing the
-    // probability that a new random value will be needed.
-    //
-    // Microbenchmarking suggests this can provide a ~33% speedup.
-    reduce_when_over_bound: bool,
+    let result = set_to_rand_mod(&mut out, &max_exclusive, (*rng).rng);
+    if result.is_err() {
+        return ERR;
+    }
 
-    // In order to carry about the `max == 0b100...` optimization described
-    // above, we need to generate one random bit more than we want to keep.
-    //
-    // When the number of bits we want to keep is a multiple of LIMB_BITS,
-    // that means we need to allocate space for an extra limb to store the
-    // extra bit.
-    extend_limbs_by_one: bool,
+    SUCCESS
+}
+
+/// Chooses a positive integer less than `max_exclusive` uniformly at random
+/// and stores it into `out`.
+fn set_to_rand_mod(out: &mut [Limb], max_exclusive: &[Limb],
+                   rng: &rand::SecureRandom)
+                   -> Result<(), error::Unspecified> {
+    debug_assert_eq!(out.len(), max_exclusive.len());
+
+    let sampling_params = select_sampling_params(max_exclusive);
+
+    // Make a copy of `out` and `max_exclusive` to handle the case where we
+    // need to extend them by an extra limb.
+    let mut tmp_out = [0; rsa::RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX + 1];
+    tmp_out[..out.len()].copy_from_slice(&out);
+    let mut tmp_max = [0; rsa::RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX + 1];
+    tmp_max[..max_exclusive.len()].copy_from_slice(&max_exclusive);
+    let extra_limb = if sampling_params.extend_limbs_by_one { 1 } else { 0 };
+
+    let range = Range {
+        max_exclusive: &tmp_max[..(max_exclusive.len() + extra_limb)],
+        sampling_params: &sampling_params,
+    };
+    try!(range.sample_into_limbs(&mut tmp_out[..out.len() + extra_limb], rng));
+
+    let dest_len = out.len();
+    out.copy_from_slice(&tmp_out[..dest_len]);
+
+    Ok(())
 }
 
 /// References a positive integer range `[1..max_exclusive)`.
@@ -155,54 +151,56 @@ impl <'a> Range<'a> {
     }
 }
 
-#[allow(non_snake_case)]
-#[doc(hidden)]
-#[no_mangle]
-pub unsafe extern fn GFp_rand_mod(out: *mut Limb, max_exclusive: *const Limb,
-                                  num_limbs: c::size_t, rng: *mut rand::RAND)
-                                  -> c::int {
-    const ERR: c::int = 0;
-    const SUCCESS: c::int = 1;
+/// Params which specify the implementation strategy for random sampling from
+/// an interval (0, max).
+struct SamplingParams {
+    // We generate random data to fill a slice of limbs, so if we want a number
+    // of bits which isn't a multiple of LIMB_BITS, we need to mask off some
+    // of the bits in the most significant limb.
+    most_sig_limb_mask: Limb,
 
-    let max_exclusive = core::slice::from_raw_parts(max_exclusive, num_limbs);
-    let mut out = core::slice::from_raw_parts_mut(out, num_limbs);
+    // Assume `x` is of the form `0b100...`. This means:
+    //
+    //    x < 2**n - 2**(n-2) - 2**(n-3).
+    //
+    // This means that `3*x < 2**(n+1)`. Proof:
+    //
+    //  3*x < 3*(2**n - 2**(n-2) - 2**(n-3))
+    //      < (2 + 1)*(2**n - 2**(n-2) - 2**(n-3))
+    //      < 2*(2**n - 2**(n-2) - 2**(n-3)) + 2**n - 2**(n-2) - 2**(n-3)
+    //      < 2**(n+1) - 2**(n-1) - 2**(n-2) + 2**n - 2**(n-2) - 2**(n-3)
+    //      < 2**(n+1) + 2**n - 2**(n-1) - 2**(n-2) - 2**(n-2) - 2**(n-3)
+    //      < 2**(n+1) + 2**n - 2**(n-1) - 2*(2**(n-2)) - 2**(n-3)
+    //      < 2**(n+1) + 2**n - 2**(n-1) - 2**(n-1) - 2**(n-3)
+    //      < 2**(n+1) + 2**n - 2*(2**(n-1)) - 2**(n-3)
+    //      < 2**(n+1) + 2**n - 2**n - 2**(n-3)
+    //      < 2**(n+1) - 2**(n-3)
+    //
+    // Then clearly 2**(n+1) - 2**(n-3) < 2**(n+1) since n is positive.
+    //
+    // This means that when `max` is of the form `0b100...`, we can generate a
+    // value in the range [0, 2**(n+1)), which would fall into one of four
+    // sub-intervals:
+    //
+    //    [0, max)          => Return the value as-is.
+    //    [max, 2*max)      => Return `value - max`.
+    //    [2*max, 3*max)    => Return `value - max - max`.
+    //    [3*max, 2**(n+1)) => Generate a new random value and try again.
+    //
+    // This avoids biasing the result towards small values, which is what
+    // reducing the random value (mod max) would do, while reducing the
+    // probability that a new random value will be needed.
+    //
+    // Microbenchmarking suggests this can provide a ~33% speedup.
+    reduce_when_over_bound: bool,
 
-    let result = set_to_rand_mod(&mut out, &max_exclusive, (*rng).rng);
-    if result.is_err() {
-        return ERR;
-    }
-
-    SUCCESS
-}
-
-/// Chooses a positive integer less than `max_exclusive` uniformly at random
-/// and stores it into `out`.
-fn set_to_rand_mod(out: &mut [Limb], max_exclusive: &[Limb],
-                   rng: &rand::SecureRandom)
-                   -> Result<(), error::Unspecified> {
-    debug_assert_eq!(out.len(), max_exclusive.len());
-
-    let sampling_params = select_sampling_params(max_exclusive);
-
-    // Make a copy of `out` and `max_exclusive` to handle the case where we
-    // need to extend them by an extra limb.
-    let mut tmp_out = [0; rsa::RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX + 1];
-    tmp_out[..out.len()].copy_from_slice(&out);
-    let mut tmp_max = [0; rsa::RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX + 1];
-    tmp_max[..max_exclusive.len()].copy_from_slice(&max_exclusive);
-    let extra_limb = if sampling_params.extend_limbs_by_one { 1 } else { 0 };
-
-    let range = Range {
-        max_exclusive: &tmp_max[..(max_exclusive.len() + extra_limb)],
-        sampling_params: &sampling_params,
-    };
-    try!(range.sample_into_limbs(&mut tmp_out[..out.len() + extra_limb],
-                                 rng));
-
-    let dest_len = out.len();
-    out.copy_from_slice(&tmp_out[..dest_len]);
-
-    Ok(())
+    // In order to carry about the `max == 0b100...` optimization described
+    // above, we need to generate one random bit more than we want to keep.
+    //
+    // When the number of bits we want to keep is a multiple of LIMB_BITS,
+    // that means we need to allocate space for an extra limb to store the
+    // extra bit.
+    extend_limbs_by_one: bool,
 }
 
 /// Decide implementation strategy for random sampling.
