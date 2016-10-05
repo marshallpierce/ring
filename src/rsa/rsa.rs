@@ -19,10 +19,6 @@ use untrusted;
 
 mod padding;
 
-pub const RSA_PUBLIC_KEY_MODULUS_BITS_MAX: usize = 4096;
-pub const RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX: usize =
-    (RSA_PUBLIC_KEY_MODULUS_BITS_MAX + limb::LIMB_BITS - 1) / limb::LIMB_BITS;
-
 // `RSA_PKCS1_SHA1` is intentionally not exposed.
 #[cfg(feature = "rsa_signing")]
 pub use self::padding::RSAEncoding;
@@ -40,6 +36,15 @@ pub use self::padding::{
 
 // Maximum RSA modulus size supported for signature verification (in bytes).
 const PUBLIC_KEY_PUBLIC_MODULUS_MAX_LEN: usize = 8192 / 8;
+
+// Keep in sync with the documentation comment for `RSAKeyPair` and
+// `PRIVATE_KEY_PUBLIC_MODULUS_BITS_MAX` in rsa.c.
+const PRIVATE_KEY_PUBLIC_MODULUS_BITS_MAX: usize = 4096;
+
+const PRIVATE_KEY_PUBLIC_MODULUS_LIMBS_MAX: usize =
+    (PRIVATE_KEY_PUBLIC_MODULUS_BITS_MAX + limb::LIMB_BITS - 1) /
+    limb::LIMB_BITS;
+
 
 /// Parameters for RSA verification.
 pub struct RSAParameters {

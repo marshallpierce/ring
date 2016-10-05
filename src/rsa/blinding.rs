@@ -18,6 +18,8 @@
 use {c, core, rand, error, rsa};
 use limb::*;
 
+/// Sets `out`, which as `num_limbs` limbs, to a random value in the range
+/// [1, `max_exclusive`), where `max_exclusive` also has `num_limbs` limbs.
 #[allow(non_snake_case)]
 #[doc(hidden)]
 #[no_mangle]
@@ -43,15 +45,21 @@ pub unsafe extern fn GFp_rand_mod(out: *mut Limb, max_exclusive: *const Limb,
 fn set_to_rand_mod(out: &mut [Limb], max_exclusive: &[Limb],
                    rng: &rand::SecureRandom)
                    -> Result<(), error::Unspecified> {
-    debug_assert_eq!(out.len(), max_exclusive.len());
+    assert_eq!(out.len(), max_exclusive.len());
+    assert!(out.len() >= 1);
+    assert!(out.len() <= rsa::PRIVATE_KEY_PUBLIC_MODULUS_LIMBS_MAX);
+    assert!(max_exclusive.len() >= 1);
+    assert!(max_exclusive.len() <=
+                rsa::PRIVATE_KEY_PUBLIC_MODULUS_LIMBS_MAX);
 
     let sampling_params = select_sampling_params(max_exclusive);
 
-    // Make a copy of `out` and `max_exclusive` to handle the case where we
-    // need to extend them by an extra limb.
-    let mut tmp_out = [0; rsa::RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX + 1];
+    // Make copies of `out` and `max_exclusive` that are padded on the most
+    // significant end by at least one zero limb. This is needed to handle the
+    // `sampling_params.extend_limbs_by_one` case.
+    let mut tmp_out = [0; rsa::PRIVATE_KEY_PUBLIC_MODULUS_LIMBS_MAX + 1];
     tmp_out[..out.len()].copy_from_slice(&out);
-    let mut tmp_max = [0; rsa::RSA_PUBLIC_KEY_MODULUS_LIMBS_MAX + 1];
+    let mut tmp_max = [0; rsa::PRIVATE_KEY_PUBLIC_MODULUS_LIMBS_MAX + 1];
     tmp_max[..max_exclusive.len()].copy_from_slice(&max_exclusive);
     let extra_limb = if sampling_params.extend_limbs_by_one { 1 } else { 0 };
 
@@ -67,8 +75,8 @@ fn set_to_rand_mod(out: &mut [Limb], max_exclusive: &[Limb],
     Ok(())
 }
 
-/// References a positive integer range `[1..max_exclusive)`.
-/// `max_exclusive` is assumed to be public, not secret.
+/// References a positive integer range `[1..max_exclusive)`. `max_exclusive`
+/// is assumed to be public, not secret.
 //
 // TODO(djudd) Part of this code can potentially be pulled back into
 // `super::limb` and shared with EC key generation, without unnecessarily
@@ -79,13 +87,15 @@ struct Range<'a> {
 }
 
 impl <'a> Range<'a> {
-    /// Are these little-endian limbs within the range?
-    ///
-    /// Checks in constant time.
+    /// Checks that `limbs` are in the range. If `limbs` is in range then it
+    /// runs in constant time with respect to its value.
     fn are_limbs_within(&self, limbs: &[Limb]) -> bool {
         assert_eq!(self.max_exclusive.len(), limbs.len());
 
-        if limbs_less_than_limbs_constant_time(limbs, self.max_exclusive) != LimbMask::True {
+        // The caller calls this in a sequence where it makes more sense to
+        // check for too-large values first and return early.
+        if limbs_less_than_limbs_constant_time(limbs, self.max_exclusive) !=
+                LimbMask::True {
             return false;
         }
 
@@ -116,34 +126,30 @@ impl <'a> Range<'a> {
                 try!(rng.fill(&mut dest_as_bytes));
             }
 
-            {
-                // Mask off unwanted bits
-                let mask = self.sampling_params.most_sig_limb_mask;
-                out[self.max_exclusive.len() - 1] &= mask;
-            }
+            // Mask off unwanted bits.
+            let mask = self.sampling_params.most_sig_limb_mask;
+            out[self.max_exclusive.len() - 1] &= mask;
 
             if self.are_limbs_within(&out) {
                 return Ok(());
             }
 
             if self.sampling_params.reduce_when_over_bound {
-                // `out` is not in (0, max) but maybe we can fix that.
-                // (See above for explanation of why this is safe.)
-
                 limbs_reduce_once_constant_time(out, self.max_exclusive);
                 if self.are_limbs_within(&out) {
-                    // `out` was in (max, 2*max)
+                    // `out` started out in (max, 2*max).
                     return Ok(());
                 }
 
                 limbs_reduce_once_constant_time(out, self.max_exclusive);
                 if self.are_limbs_within(&out) {
-                    // `out` was in (2*max, 3*max)
+                    // `out` started out in (2*max, 3*max).
                     return Ok(());
                 }
 
-                // `out` was in [3*max, 2**(n+1)) or equal to 0, max, or 2*max,
-                // so we can't fix it; loop & generate a new random value.
+                // `out` started out in [3*max, 2**(n+1)) or congruent to
+                // 0 mod max (0, max, or 2*max), so we can't fix it. Loop and
+                // generate a new random value.
             }
         }
 
@@ -218,7 +224,8 @@ fn select_sampling_params(max_exclusive: &[Limb]) -> SamplingParams {
 
     if most_sig >> (LIMB_BITS - 3) == 0b100 {
         SamplingParams {
-            most_sig_limb_mask: 1, // effectively a carry into a new, more-significant limb
+            // This is effectively a carry into a new, more-significant limb.
+            most_sig_limb_mask: 1,
             reduce_when_over_bound: true,
             extend_limbs_by_one: true,
         }
@@ -393,12 +400,16 @@ mod tests {
         let _ = generate_and_assert_success!([Limb::max_value(), 1], 2);
         let _ = generate_and_assert_success!([0, 1 << (LIMB_BITS - 1)], 2);
         let _ = generate_and_assert_success!([1, 1 << (LIMB_BITS - 1)], 2);
-        let _ = generate_and_assert_success!([1 << (LIMB_BITS - 1), 1 << (LIMB_BITS - 1)], 2);
-        let _ = generate_and_assert_success!([Limb::max_value(), 1 << (LIMB_BITS - 1)], 2);
+        let _ = generate_and_assert_success!(
+                    [1 << (LIMB_BITS - 1), 1 << (LIMB_BITS - 1)], 2);
+        let _ = generate_and_assert_success!(
+                    [Limb::max_value(), 1 << (LIMB_BITS - 1)], 2);
         let _ = generate_and_assert_success!([0, Limb::max_value()], 2);
         let _ = generate_and_assert_success!([1, Limb::max_value()], 2);
-        let _ = generate_and_assert_success!([1 << (LIMB_BITS - 1), Limb::max_value()], 2);
-        let _ = generate_and_assert_success!([Limb::max_value(), Limb::max_value()], 2);
+        let _ = generate_and_assert_success!(
+                    [1 << (LIMB_BITS - 1), Limb::max_value()], 2);
+        let _ = generate_and_assert_success!(
+                    [Limb::max_value(), Limb::max_value()], 2);
     }
 
     #[test]
