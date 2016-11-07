@@ -1,5 +1,5 @@
 // Copyright 2015-2016 Brian Smith.
-// Portions Copyright (c) 2015, Google Inc.
+// Portions Copyright (c) 2014, 2015, Google Inc.
 //
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted, provided that the above
@@ -16,31 +16,86 @@
 // TODO: enforce maximum input length.
 
 use {c, chacha, constant_time, error};
-
-pub struct SigningContext {
-    state: State,
-}
+use polyfill::slice::u32_from_le_u8;
+use std::cmp::min;
+use std::mem::align_of;
+use std::os::raw::c_void;
 
 impl SigningContext {
     #[inline]
     pub fn from_key(key: Key) -> SigningContext {
-        let mut ctx = SigningContext {
-            state: [0u8; STATE_LEN],
+        let mut ctx = SigningContext{
+            _align: [0; 0],
+            opaque: [0; BLOCK_STATE_SIZE],
+            nonce: [0; 4],
+            buf: [0; 16],
+            buf_used: 0,
+            func: Funcs {
+                blocks_fn: GFp_poly1305_blocks,
+                emit_fn: GFp_poly1305_emit
+            }
         };
-        unsafe { GFp_poly1305_init(&mut ctx.state, &key.bytes); }
+        assert!(align_of::<SigningContext>() % 8 == 0);
+
+        let set_fns = init(&mut ctx.opaque, &key.bytes, &mut ctx.func) == 0;
+        /* TODO XXX: It seems at least some implementations |poly1305_init| always
+         * return the same value, so this conditional logic isn't always necessary.
+         * And, for platforms that have such conditional logic also in the ASM code,
+         * it seems it would be better to move the conditional logic out of the asm
+         * and into the higher-level code. */
+        if !set_fns {
+            ctx.func.blocks_fn = GFp_poly1305_blocks;
+            ctx.func.emit_fn = GFp_poly1305_emit;
+        }
+
+        ctx.nonce = [
+            u32_from_le_u8(slice_as_array_ref!(&key.bytes[16..20], 4).unwrap()),
+            u32_from_le_u8(slice_as_array_ref!(&key.bytes[20..24], 4).unwrap()),
+            u32_from_le_u8(slice_as_array_ref!(&key.bytes[24..28], 4).unwrap()),
+            u32_from_le_u8(slice_as_array_ref!(&key.bytes[28..32], 4).unwrap()),
+        ];
         ctx
     }
 
-    #[inline]
-    pub fn update(&mut self, input: &[u8]) {
-        unsafe {
-            GFp_poly1305_update(&mut self.state, input.as_ptr(), input.len());
+    pub fn update(&mut self, mut input: &[u8]) {
+        if self.buf_used != 0 {
+            let buf_used = self.buf_used as usize;
+            let todo = min(input.len(), 16 - buf_used);
+
+            self.buf[buf_used .. buf_used + todo].copy_from_slice(&input[..todo]);
+            self.buf_used += todo as c::int;
+            input = &input[todo..];
+
+            if self.buf_used == 16 {
+                self.func.blocks(&mut self.opaque, &mut self.buf, 1 /* pad */);
+                self.buf_used = 0;
+            }
+        }
+
+        if input.len() >= 16 {
+            let todo = input.len() & !0xf;
+            let (complete_blocks, remainder) = input.split_at(todo);
+            self.func.blocks(&mut self.opaque, complete_blocks, 1 /* pad */);
+            input = remainder;
+        }
+
+        if input.len() != 0 {
+            self.buf[..input.len()].copy_from_slice(input);
+            self.buf_used = input.len() as c::int;
         }
     }
 
-    #[inline]
     pub fn sign(mut self, tag_out: &mut Tag) {
-        unsafe { GFp_poly1305_finish(&mut self.state, tag_out); }
+        let buf_used = self.buf_used as usize;
+        if buf_used != 0 {
+            self.buf[buf_used] = 1;
+            for byte in &mut self.buf[buf_used+1..] {
+                *byte = 0;
+            }
+            self.func.blocks(&mut self.opaque, &self.buf[..], 0 /* already padded */);
+        }
+
+        self.func.emit(&mut self.opaque, tag_out, &self.nonce);
     }
 }
 
@@ -87,26 +142,68 @@ pub type Tag = [u8; TAG_LEN];
 /// The length of a `Tag`.
 pub const TAG_LEN: usize = 128 / 8;
 
-type State = [u8; STATE_LEN];
-const STATE_LEN: usize = 256;
+const BLOCK_STATE_SIZE: usize = 192;
+
+#[repr(C)]
+struct Funcs {
+    blocks_fn: unsafe extern fn(*mut c_void, *const u8, c::size_t, u32), 
+    emit_fn: unsafe extern fn(*mut c_void, *mut u8, *const u32),
+}
+
+fn init(state: &mut [u8; BLOCK_STATE_SIZE], key: &[u8; KEY_LEN], func: *mut Funcs) -> i32 {
+    unsafe {
+        GFp_poly1305_init_asm(
+            state.as_mut_ptr() as *mut c_void,
+            key.as_ptr(),
+            func as *mut c_void
+        )
+    }
+}
+
+impl Funcs {
+    fn blocks(&self, state: &mut [u8; BLOCK_STATE_SIZE], data: &[u8], should_pad: u32) {
+        unsafe {
+            (self.blocks_fn)(
+                state.as_mut_ptr() as *mut c_void,
+                data.as_ptr(),
+                data.len(),
+                should_pad
+            )
+        };
+    }
+
+    fn emit(&self, state: &mut [u8; BLOCK_STATE_SIZE], tag: &mut Tag, nonce: &[u32; 4]) {
+        unsafe {
+             (self.emit_fn)(
+                 state.as_mut_ptr() as *mut c_void,
+                 tag.as_mut_ptr(),
+                 nonce.as_ptr()
+             );
+        }
+    }
+}
+
+#[repr(C)]
+pub struct SigningContext {
+    _align: [u64; 0],
+    opaque: [u8; BLOCK_STATE_SIZE],
+    nonce: [u32; 4],
+    buf: [u8; 16],
+    buf_used: c::int,
+    func: Funcs
+}
 
 extern {
-    fn GFp_poly1305_init(state: &mut State, key: &KeyBytes);
-    fn GFp_poly1305_finish(state: &mut State, mac: &mut Tag);
-    fn GFp_poly1305_update(state: &State, in_: *const u8, in_len: c::size_t);
+    fn GFp_poly1305_init_asm(state: *mut c_void, key: *const u8, out_func: *mut c_void) -> c::int;
+    fn GFp_poly1305_blocks(ctx: *mut c_void, _in: *const u8, len: c::size_t, padbit: u32);
+    fn GFp_poly1305_emit(ctx: *mut c_void, mac: *mut u8, nonce: *const u32);
 }
 
 #[cfg(test)]
 mod tests {
-    use {c, error, test};
+    use {error, test};
     use core;
     use super::*;
-
-    #[test]
-    pub fn test_poly1305_state_len() {
-        assert_eq!((super::STATE_LEN + 255) / 256,
-                   (unsafe { GFp_POLY1305_STATE_LEN } + 255) / 256);
-    }
 
     // Adapted from BoringSSL's crypto/poly1305/poly1305_test.cc.
     #[test]
@@ -194,9 +291,5 @@ mod tests {
         assert_eq!(&expected_mac[..], &actual_mac);
 
         Ok(())
-    }
-
-    extern {
-        static GFp_POLY1305_STATE_LEN: c::size_t;
     }
 }
