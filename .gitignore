@@ -22,6 +22,10 @@ doc/doc.css
 *.vsp
 *.vspx
 
+# JetBrains Junk
+.idea
+*.iml
+
 # Cargo Junk
 Cargo.lock
 target/

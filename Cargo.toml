@@ -264,6 +264,9 @@ name = "ring"
 [dependencies]
 untrusted = "0.3.2"
 
+[dev-dependencies]
+rustc-serialize = "0.3.15"
+
 [target.'cfg(unix)'.dependencies]
 lazy_static = "0.2.1"
 

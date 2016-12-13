@@ -48,7 +48,6 @@
 )]
 #![deny(
     const_err,
-    dead_code,
     deprecated,
     exceeding_bitshifts,
     fat_ptr_transmutes,
@@ -87,7 +86,6 @@
     unused_unsafe,
     unused_variables,
     variant_size_differences,
-    warnings,
     while_true,
 )]
 
@@ -109,6 +107,9 @@ extern crate lazy_static;
 extern crate std;
 
 extern crate untrusted;
+
+#[cfg(test)]
+extern crate rustc_serialize;
 
 #[macro_use]
 mod bssl;
@@ -156,6 +157,7 @@ mod rsa;
 #[doc(hidden)]
 pub use rsa::GFp_rand_mod;
 
+#[path = "signature/signature.rs"]
 pub mod signature;
 
 #[cfg(any(feature = "use_heap", test))]
