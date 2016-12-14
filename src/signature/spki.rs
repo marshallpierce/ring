@@ -30,83 +30,6 @@ pub enum VerifyWithSPKIError {
     /// parameters (ECDSA_p256 vs ECDSA_384, etc).
     UnsupportedSignatureAlgorithmForPublicKey,
 
-    /// The signature algorithm for a signature is not in the set of supported
-    /// signature algorithms given.
-    UnsupportedSignatureAlgorithm,
-}
-
-/// X.509 certificates and related items that are signed are almost always
-/// encoded in the format "tbs||signatureAlgorithm||signature". This structure
-/// captures this pattern.
-pub struct SignedData<'a> {
-    /// The signed data. This would be `tbsCertificate` in the case of an X.509
-    /// certificate, `tbsResponseData` in the case of an OCSP response, and the
-    /// data nested in the `digitally-signed` construct for TLS 1.2 signed
-    /// data.
-    data: untrusted::Input<'a>,
-
-    /// The value of the `AlgorithmIdentifier`. This would be
-    /// `signatureAlgorithm` in the case of an X.509 certificate or OCSP
-    /// response. This would have to be synthesized in the case of TLS 1.2
-    /// signed data, since TLS does not identify algorithms by ASN.1 OIDs.
-    pub algorithm: untrusted::Input<'a>,
-
-    /// The value of the signature. This would be `signature` in an X.509
-    /// certificate or OCSP response. This would be the value of
-    /// `DigitallySigned.signature` for TLS 1.2 signed data.
-    signature: untrusted::Input<'a>,
-}
-
-/// Verify `signed_data` using the public key in the DER-encoded
-/// SubjectPublicKeyInfo `spki` using one of the algorithms in
-/// `supported_algorithms`.
-///
-/// The algorithm is chosen based on the algorithm information encoded in the
-/// algorithm identifiers in `public_key` and `signed_data.algorithm`. The
-/// ordering of the algorithms in `supported_algorithms` does not really matter,
-/// but generally more common algorithms should go first, as it is scanned
-/// linearly for matches.
-pub fn verify_signed_data(supported_algorithms: &[&SignatureAlgorithm],
-                          spki_value: untrusted::Input,
-                          signed_data: &SignedData) -> Result<(), VerifyWithSPKIError> {
-    // We need to verify the signature in `signed_data` using the public key
-    // in `public_key`. In order to know which *ring* signature verification
-    // algorithm to use, we need to know the public key algorithm (ECDSA,
-    // RSA PKCS#1, etc.), the curve (if applicable), and the digest algorithm.
-    // `signed_data` identifies only the public key algorithm and the digest
-    // algorithm, and `public_key` identifies only the public key algorithm and
-    // the curve (if any). Thus, we have to combine information from both
-    // inputs to figure out which `ring::signature::VerificationAlgorithm` to
-    // use to verify the signature.
-    //
-    // This is all further complicated by the fact that we don't have any
-    // implicit knowledge about any algorithms or identifiers, since all of
-    // that information is encoded in `supported_algorithms.` In particular, we
-    // avoid hard-coding any of that information so that (link-time) dead code
-    // elimination will work effectively in eliminating code for unused
-    // algorithms.
-
-    // Parse the signature.
-    //
-    let mut found_signature_alg_match = false;
-    for supported_alg in supported_algorithms.iter()
-        .filter(|alg| alg.signature_alg_id
-            .matches_algorithm_id_value(signed_data.algorithm)) {
-        match verify_signature(supported_alg, spki_value, signed_data.data,
-                               signed_data.signature) {
-            Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey) => {
-                found_signature_alg_match = true;
-                continue;
-            },
-            result => { return result; },
-        }
-    }
-
-    if found_signature_alg_match {
-        Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey)
-    } else {
-        Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithm)
-    }
 }
 
 pub fn verify_signature(signature_alg: &SignatureAlgorithm,
@@ -121,7 +44,6 @@ pub fn verify_signature(signature_alg: &SignatureAlgorithm,
                       signature)
         .map_err(|_| VerifyWithSPKIError::InvalidSignatureForPublicKey)
 }
-
 
 struct SubjectPublicKeyInfo<'a> {
     algorithm_id_value: untrusted::Input<'a>,
@@ -325,54 +247,6 @@ mod tests {
 
     // TODO: The expected results need to be modified for SHA-1 deprecation.
 
-    macro_rules! test_verify_signed_data {
-        ($fn_name:ident, $file_name:expr, $expected_result:expr) => {
-            #[test]
-            fn $fn_name() {
-                test_verify_signed_data($file_name, $expected_result);
-            }
-        }
-    }
-
-    fn test_verify_signed_data(file_name: &str,
-                               expected_result: Result<(), VerifyWithSPKIError>) {
-        let tsd = parse_test_signed_data(file_name);
-        let spki_value = untrusted::Input::from(&tsd.spki);
-        let spki_value = spki_value.read_all(VerifyWithSPKIError::BadDER, |input| {
-            der::expect_tag_and_get_value(input, der::Tag::Sequence)
-                .map_err(|_| VerifyWithSPKIError::BadDER)
-        }).unwrap();
-
-        // we can't use `parse_signed_data` because it requires `data`
-        // to be an ASN.1 SEQUENCE, and that isn't the case with
-        // Chromium's test data. TODO: The test data set should be
-        // expanded with SEQUENCE-wrapped data so that we can actually
-        // test `parse_signed_data`.
-
-        let algorithm = untrusted::Input::from(&tsd.algorithm);
-        let algorithm = algorithm.read_all(VerifyWithSPKIError::BadDER, |input| {
-            der::expect_tag_and_get_value(input, der::Tag::Sequence)
-                .map_err(|_| VerifyWithSPKIError::BadDER)
-        }).unwrap();
-
-        let signature = untrusted::Input::from(&tsd.signature);
-        let signature = signature.read_all(VerifyWithSPKIError::BadDER, |input| {
-            der::bit_string_with_no_unused_bits(input)
-                .map_err(|_| VerifyWithSPKIError::BadDER)
-        }).unwrap();
-
-        let signed_data = spki::SignedData {
-            data: untrusted::Input::from(&tsd.data),
-            algorithm: algorithm,
-            signature: signature
-        };
-
-        assert_eq!(expected_result,
-        spki::verify_signed_data(
-            SUPPORTED_ALGORITHMS_IN_TESTS, spki_value,
-            &signed_data));
-    }
-
     macro_rules! test_verify_signature {
         ($fn_name:ident, $file_name:expr, $signature_alg:expr, $expected_result:expr) => {
             #[test]
@@ -403,28 +277,6 @@ mod tests {
                                spki_value,
                                untrusted::Input::from(&tsd.data),
                                signature));
-    }
-
-    // XXX: This is testing code that isn't even in this module.
-    macro_rules! test_verify_signed_data_signature_outer {
-        ($fn_name:ident, $file_name:expr, $expected_result:expr) => {
-            #[test]
-            fn $fn_name() {
-                test_verify_signed_data_signature_outer($file_name,
-                                                        $expected_result);
-            }
-        }
-    }
-
-    fn test_verify_signed_data_signature_outer(file_name: &str,
-                                               expected_error: VerifyWithSPKIError) {
-        let tsd = parse_test_signed_data(file_name);
-        let signature = untrusted::Input::from(&tsd.signature);
-        assert_eq!(Err(expected_error),
-        signature.read_all(VerifyWithSPKIError::BadDER, |input| {
-            der::bit_string_with_no_unused_bits(input)
-                .map_err(|_| VerifyWithSPKIError::BadDER)
-        }));
     }
 
     // XXX: This is testing code that is not even in this module.
@@ -586,7 +438,6 @@ mod tests {
     struct TestSignedData {
         spki: std::vec::Vec<u8>,
         data: std::vec::Vec<u8>,
-        algorithm: std::vec::Vec<u8>,
         signature: std::vec::Vec<u8>
     }
 
@@ -598,14 +449,12 @@ mod tests {
         let mut lines = std::io::BufReader::new(&file).lines();
 
         let spki = read_pem_section(&mut lines, "PUBLIC KEY");
-        let algorithm = read_pem_section(&mut lines, "ALGORITHM");
         let data = read_pem_section(&mut lines, "DATA");
         let signature = read_pem_section(&mut lines, "SIGNATURE");
 
         TestSignedData {
             spki: spki,
             data: data,
-            algorithm: algorithm,
             signature: signature
         }
     }
@@ -636,26 +485,4 @@ mod tests {
 
         base64.from_base64().unwrap()
     }
-
-    static SUPPORTED_ALGORITHMS_IN_TESTS:
-    &'static [&'static spki::SignatureAlgorithm] = &[
-        // Reasonable algorithms.
-        &spki::RSA_PKCS1_2048_8192_SHA256,
-        &spki::ECDSA_P256_SHA256,
-        &spki::ECDSA_P384_SHA384,
-        &spki::RSA_PKCS1_2048_8192_SHA384,
-        &spki::RSA_PKCS1_2048_8192_SHA512,
-        &spki::RSA_PKCS1_3072_8192_SHA384,
-        &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-        &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-        &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-
-        // Algorithms deprecated because they are annoying (P-521) or because
-        // they are nonsensical combinations.
-        &spki::ECDSA_P256_SHA384, // Truncates digest.
-        &spki::ECDSA_P384_SHA256, // Digest is unnecessarily short.
-
-        // Algorithms deprecated because they are bad.
-        &spki::RSA_PKCS1_2048_8192_SHA1, // SHA-1
-    ];
 }
