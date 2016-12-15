@@ -301,39 +301,6 @@ mod tests {
 
     // XXX: Some of the BadDER tests should have better error codes, maybe?
 
-    // TODO need ECDSA_P256_SHA512 for these tests
-    // XXX: We should have a variant of this test with a SHA-256 digest that gives
-    // `VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey`.
-//    test_verify_signature!(
-//        test_ecdsa_prime256v1_sha512_spki_params_null,
-//        "ecdsa-prime256v1-sha512-spki-params-null.pem",
-//        &spki::ECDSA_P256_SHA512,
-//        Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
-//    test_verify_signature!(
-//        test_ecdsa_prime256v1_sha512_using_ecdh_key,
-//        "ecdsa-prime256v1-sha512-using-ecdh-key.pem",
-//        &spki::ECDSA_P256_SHA512,
-//        Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
-    // XXX: We should have a variant of this test with a SHA-256 digest that gives
-    // `VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey`.
-//    test_verify_signature!(
-//        test_ecdsa_prime256v1_sha512_using_ecmqv_key,
-//        "ecdsa-prime256v1-sha512-using-ecmqv-key.pem",
-//        &spki::ECDSA_P256_SHA512,
-//        Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
-    // XXX: We should have a variant of this test with a SHA-256 digest that gives
-    // `VerifyWithSPKIError::InvalidSignatureForPublicKey`.
-//    test_verify_signature!(
-//        test_ecdsa_prime256v1_sha512_wrong_signature_format,
-//        "ecdsa-prime256v1-sha512-wrong-signature-format.pem",
-//        &spki::ECDSA_P256_SHA512,
-//        Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
-    // Differs from Chromium because we don't support P-256 with SHA-512.
-//    test_verify_signature!(
-//        test_ecdsa_prime256v1_sha512,
-//        "ecdsa-prime256v1-sha512.pem",
-//        &spki::ECDSA_P256_SHA512,
-//        Ok());
     test_verify_signature!(test_ecdsa_secp384r1_sha256_corrupted_data,
                              "ecdsa-secp384r1-sha256-corrupted-data.pem",
                              &spki::ECDSA_P384_SHA256,
