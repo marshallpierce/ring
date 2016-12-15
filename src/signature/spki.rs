@@ -29,13 +29,25 @@ pub enum VerifyWithSPKIError {
     /// A mismatch could be because of the algorithm (RSA vs DSA, etc) or the
     /// parameters (ECDSA_p256 vs ECDSA_384, etc).
     UnsupportedSignatureAlgorithmForPublicKey,
-
 }
 
-pub fn verify_signature(signature_alg: &SignatureAlgorithm,
-                        spki_value: untrusted::Input, msg: untrusted::Input,
-                        signature: untrusted::Input) -> Result<(), VerifyWithSPKIError> {
-    let spki = try!(parse_spki_value(spki_value));
+/// Verify the signature `signature` of message `msg` with the public key
+/// `spki_public_key` using the algorithm `alg`.
+/// `signature::verify` is suitable when the public key bytes you have are the
+/// DER ASN.1 of the key. This method is suitable when the public key is in
+/// SubjectPublicKeyInfo form (https://tools.ietf.org/html/rfc5280#section-4.1),
+/// which is a wrapper containing both the key and an identifier.
+///
+/// A common situation where this encoding is encountered is when using public keys
+/// exported by OpenSSL. If you export an RSA or ECDSA public key from a keypair
+/// with `-pubout` and friends, you will get a DER of an SPKI wrapper containing
+/// a public key. You could extract the bitstring of the key itself and use
+/// `signature:;verify`, but that is often inconvient.
+pub fn verify(signature_alg: &Algorithm,
+              public_key_spki: untrusted::Input,
+              msg: untrusted::Input,
+              signature: untrusted::Input) -> Result<(), VerifyWithSPKIError> {
+    let spki = try!(parse_spki_value(public_key_spki));
     if !signature_alg.public_key_alg_id
         .matches_algorithm_id_value(spki.algorithm_id_value) {
         return Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
@@ -69,9 +81,9 @@ fn parse_spki_value(input: untrusted::Input)
     })
 }
 
-
-/// A signature algorithm.
-pub struct SignatureAlgorithm {
+/// A signature algorithm for use when validating a signature with an SPKI-formatted public key.
+pub struct Algorithm {
+    /// The `algorithm` member in SPKI from https://tools.ietf.org/html/rfc5280#section-4.1.
     public_key_alg_id: AlgorithmIdentifier,
     verification_alg: &'static signature::VerificationAlgorithm,
 }
@@ -83,85 +95,83 @@ pub struct SignatureAlgorithm {
 // the other signature algorithms we support and for compatibility.
 
 /// ECDSA signatures using the P-256 curve and SHA-256.
-pub static ECDSA_P256_SHA256: SignatureAlgorithm = SignatureAlgorithm {
+pub static ECDSA_P256_SHA256: Algorithm = Algorithm {
     public_key_alg_id: ECDSA_P256,
     verification_alg: &signature::ECDSA_P256_SHA256_ASN1,
 };
 
 /// ECDSA signatures using the P-256 curve and SHA-384. Deprecated.
-pub static ECDSA_P256_SHA384: SignatureAlgorithm = SignatureAlgorithm {
+pub static ECDSA_P256_SHA384: Algorithm = Algorithm {
     public_key_alg_id: ECDSA_P256,
     verification_alg: &signature::ECDSA_P256_SHA384_ASN1,
 };
 
 /// ECDSA signatures using the P-384 curve and SHA-256. Deprecated.
-pub static ECDSA_P384_SHA256: SignatureAlgorithm = SignatureAlgorithm {
+pub static ECDSA_P384_SHA256: Algorithm = Algorithm {
     public_key_alg_id: ECDSA_P384,
     verification_alg: &signature::ECDSA_P384_SHA256_ASN1,
 };
 
 /// ECDSA signatures using the P-384 curve and SHA-384.
-pub static ECDSA_P384_SHA384: SignatureAlgorithm = SignatureAlgorithm {
+pub static ECDSA_P384_SHA384: Algorithm = Algorithm {
     public_key_alg_id: ECDSA_P384,
     verification_alg: &signature::ECDSA_P384_SHA384_ASN1,
 };
 
 /// RSA PKCS#1 1.5 signatures using SHA-1 for keys of 2048-8192 bits.
 /// Deprecated.
-pub static RSA_PKCS1_2048_8192_SHA1: SignatureAlgorithm = SignatureAlgorithm {
+pub static RSA_PKCS1_2048_8192_SHA1: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PKCS1_2048_8192_SHA1,
 };
 
 /// RSA PKCS#1 1.5 signatures using SHA-256 for keys of 2048-8192 bits.
-pub static RSA_PKCS1_2048_8192_SHA256: SignatureAlgorithm = SignatureAlgorithm {
+pub static RSA_PKCS1_2048_8192_SHA256: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PKCS1_2048_8192_SHA256,
 };
 
 /// RSA PKCS#1 1.5 signatures using SHA-384 for keys of 2048-8192 bits.
-pub static RSA_PKCS1_2048_8192_SHA384: SignatureAlgorithm = SignatureAlgorithm {
+pub static RSA_PKCS1_2048_8192_SHA384: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PKCS1_2048_8192_SHA384,
 };
 
 /// RSA PKCS#1 1.5 signatures using SHA-512 for keys of 2048-8192 bits.
-pub static RSA_PKCS1_2048_8192_SHA512: SignatureAlgorithm = SignatureAlgorithm {
+pub static RSA_PKCS1_2048_8192_SHA512: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PKCS1_2048_8192_SHA512,
 };
 
 /// RSA PKCS#1 1.5 signatures using SHA-384 for keys of 3072-8192 bits.
-pub static RSA_PKCS1_3072_8192_SHA384: SignatureAlgorithm = SignatureAlgorithm {
+pub static RSA_PKCS1_3072_8192_SHA384: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PKCS1_3072_8192_SHA384,
 };
 
 /// RSA PSS signatures using SHA-256 for keys of 2048-8192 bits and of
 /// type rsaEncryption; see https://tools.ietf.org/html/rfc4055#section-1.2
-pub static RSA_PSS_2048_8192_SHA256_LEGACY_KEY: SignatureAlgorithm =
-SignatureAlgorithm {
+pub static RSA_PSS_2048_8192_SHA256_LEGACY_KEY: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PSS_2048_8192_SHA256,
 };
 
 /// RSA PSS signatures using SHA-384 for keys of 2048-8192 bits and of
 /// type rsaEncryption; see https://tools.ietf.org/html/rfc4055#section-1.2
-pub static RSA_PSS_2048_8192_SHA384_LEGACY_KEY: SignatureAlgorithm =
-SignatureAlgorithm {
+pub static RSA_PSS_2048_8192_SHA384_LEGACY_KEY: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PSS_2048_8192_SHA384,
 };
 
 /// RSA PSS signatures using SHA-512 for keys of 2048-8192 bits and of
 /// type rsaEncryption; see https://tools.ietf.org/html/rfc4055#section-1.2
-pub static RSA_PSS_2048_8192_SHA512_LEGACY_KEY: SignatureAlgorithm =
-SignatureAlgorithm {
+pub static RSA_PSS_2048_8192_SHA512_LEGACY_KEY: Algorithm = Algorithm {
     public_key_alg_id: RSA_ENCRYPTION,
     verification_alg: &signature::RSA_PSS_2048_8192_SHA512,
 };
 
 struct AlgorithmIdentifier {
+    /// Binary DER for ASN.1 AlgorithmIdentifier without outer SEQUENCE or length.
     asn1_id_value: &'static [u8],
 }
 
@@ -207,7 +217,7 @@ mod tests {
     }
 
     fn test_verify_signature(file_name: &str,
-                             signature_algorithm: &'static spki::SignatureAlgorithm,
+                             signature_algorithm: &'static spki::Algorithm,
                              expected_result: Result<(), VerifyWithSPKIError>) {
         let tsd = parse_test_signed_data(file_name);
         let spki_value = untrusted::Input::from(&tsd.spki);
@@ -223,10 +233,10 @@ mod tests {
         }).unwrap();
 
         assert_eq!(expected_result,
-        spki::verify_signature(signature_algorithm,
-                               spki_value,
-                               untrusted::Input::from(&tsd.data),
-                               signature));
+        spki::verify(signature_algorithm,
+                     spki_value,
+                     untrusted::Input::from(&tsd.data),
+                     signature));
     }
 
     // XXX: Some of the BadDER tests should have better error codes, maybe?
