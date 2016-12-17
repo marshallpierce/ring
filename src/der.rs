@@ -215,7 +215,7 @@ pub mod tests {
 
     type FileLines<'a> = std::io::Lines<std::io::BufReader<&'a std::fs::File>>;
 
-    pub fn read_pem_section(lines: & mut FileLines, section_name: &str)
+    fn read_pem_section(lines: & mut FileLines, section_name: &str)
                         -> std::vec::Vec<u8> {
         // Skip comments and header
         let begin_section = format!("-----BEGIN {}-----", section_name);
