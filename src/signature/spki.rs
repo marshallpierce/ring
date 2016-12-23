@@ -40,14 +40,19 @@ pub enum VerifyWithSPKIError {
 ///
 /// A common situation where this encoding is encountered is when using public keys
 /// exported by OpenSSL. If you export an RSA or ECDSA public key from a keypair
-/// with `-pubout` and friends, you will get a DER of an SPKI wrapper containing
+/// with `-pubout` and friends, you will get DER of an SPKI wrapper containing
 /// a public key. You could extract the bitstring of the key itself and use
 /// `signature:;verify`, but that is often inconvient.
 pub fn verify(signature_alg: &Algorithm,
               public_key_spki: untrusted::Input,
               msg: untrusted::Input,
               signature: untrusted::Input) -> Result<(), VerifyWithSPKIError> {
-    let spki = try!(parse_spki_value(public_key_spki));
+    let unwrapped_spki_der = public_key_spki.read_all(VerifyWithSPKIError::BadDER, |input| {
+        der::expect_tag_and_get_value(input, der::Tag::Sequence)
+            .map_err(|_| VerifyWithSPKIError::BadDER)
+    }).unwrap();
+
+    let spki = try!(parse_spki_value(unwrapped_spki_der));
     if !signature_alg.public_key_alg_id
         .matches_algorithm_id_value(spki.algorithm_id_value) {
         return Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
