@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -ex
 
@@ -8,7 +8,7 @@ cd $test_dir
 
 messages=( msg1 msg2 )
 rsa_key_lengths=( 2048 4096 8192 )
-rsa_padding_algs=( pkcs )
+rsa_padding_modes=( pkcs1 pss )
 digest_algs=( sha1 sha256 sha384 sha512 )
 ec_curves=( prime256v1 secp384r1 )
 
@@ -37,12 +37,19 @@ do
     do
         for digest_alg in "${digest_algs[@]}"
         do
-            for rsa_padding_alg in "${rsa_padding_algs[@]}"
+            for rsa_padding_mode in "${rsa_padding_modes[@]}"
             do
-                # only takes pem keys
+                if [[ "$rsa_padding_mode" = "pss" ]]; then
+                    extra_args="-sigopt rsa_pss_saltlen:-1"
+                else
+                    extra_args=""
+                fi
+
                 # only takes pem keys
                 openssl dgst "-${digest_alg}" -sign "keys/rsa_${rsa_key_len}.pem" \
-                    -out "signatures/${message_file}_rsa_${rsa_key_len}_${rsa_padding_alg}_${digest_alg}_sig.bin" \
+                    -sigopt "rsa_padding_mode:${rsa_padding_mode}" \
+                    ${extra_args} \
+                    -out "signatures/${message_file}_rsa_${rsa_key_len}_${rsa_padding_mode}_${digest_alg}_sig.bin" \
                      "messages/${message_file}.bin"
             done
         done
