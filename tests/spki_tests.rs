@@ -11,6 +11,7 @@ use rustc_serialize::base64::FromBase64;
 use ring::der;
 use ring::signature::spki;
 use ring::signature::spki::VerifyWithSPKIError;
+#[cfg(feature = "rsa_signing")]
 use ring::signature;
 #[cfg(feature = "rsa_signing")]
 use ring::rand;
