@@ -31,10 +31,6 @@ fn test_verify_signature_pem(file_name: &str,
                              expected_result: Result<(), VerifyWithSPKIError>) {
     let tsd = parse_test_signed_data(file_name);
     let spki_value = untrusted::Input::from(&tsd.spki);
-    let spki_value = spki_value.read_all(VerifyWithSPKIError::BadDER, |input| {
-        der::expect_tag_and_get_value(input, der::Tag::Sequence)
-            .map_err(|_| VerifyWithSPKIError::BadDER)
-    }).unwrap();
 
     let signature = untrusted::Input::from(&tsd.signature);
     let signature = signature.read_all(VerifyWithSPKIError::BadDER, |input| {
@@ -182,7 +178,7 @@ fn rsa_sign_and_verify_spki(signing_encoding: &'static signature::RSAEncoding,
     // load pub key spki
     let spki_path = format!("tests/test-data/keys/{}_pub_spki.der", key_id);
     let spki_bytes = read_file_completely(Path::new(&spki_path));
-    let spki_input = load_spki_inner_der(&spki_bytes);
+    let spki_input = untrusted::Input::from(&spki_bytes);
 
     // Verify the signature.
     spki::verify(algorithm,
@@ -272,22 +268,13 @@ fn verify_signature_with_spki(algorithm: &spki::Algorithm,
     let signature = read_file_completely(sig_path);
 
     let spki_bytes = read_file_completely(spki_path);
-    let spki_input = load_spki_inner_der(&spki_bytes);
+    let spki_input = untrusted::Input::from(&spki_bytes);
 
     // Verify the signature.
     assert_eq!(expected, spki::verify(algorithm,
                                       spki_input,
                                       untrusted::Input::from(&input),
                                       untrusted::Input::from(&signature)));
-}
-
-// TODO the spki input is really the inside of an spki, not the whole spki
-fn load_spki_inner_der<'a>(der: &'a [u8]) -> untrusted::Input<'a> {
-    untrusted::Input::from(der)
-        .read_all(VerifyWithSPKIError::BadDER, |input| {
-            der::expect_tag_and_get_value(input, der::Tag::Sequence)
-                .map_err(|_| VerifyWithSPKIError::BadDER)
-        }).unwrap()
 }
 
 fn read_file_completely(path: &Path) -> Vec<u8> {
