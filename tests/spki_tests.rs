@@ -290,37 +290,74 @@ fn read_file_completely(path: &Path) -> Vec<u8> {
 //                              "rsa_2048");
 
 // 2048 bit rsa
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_sha256,
+// pkcs1
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pkcs1_sha256,
                           &signature::RSA_PKCS1_SHA256,
                           &spki::RSA_PKCS1_2048_8192_SHA256,
                           "rsa_2048");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_sha384,
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pkcs1_sha384,
                           &signature::RSA_PKCS1_SHA384,
                           &spki::RSA_PKCS1_2048_8192_SHA384,
                           "rsa_2048");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_sha512,
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pkcs1_sha512,
                           &signature::RSA_PKCS1_SHA512,
                           &spki::RSA_PKCS1_2048_8192_SHA512,
                           "rsa_2048");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_sha256,
+// pss
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pss_sha256,
+                          &signature::RSA_PSS_SHA256,
+                          &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                          "rsa_2048");
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pss_sha384,
+                          &signature::RSA_PSS_SHA384,
+                          &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+                          "rsa_2048");
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pss_sha512,
+                          &signature::RSA_PSS_SHA512,
+                          &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+                          "rsa_2048");
+// pkcs1
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pkcs1_sha256,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
                                "rsa_2048",
-                               "pkcs",
+                               "pkcs1",
                                "sha256",
                                "rsa_4096",
                                "sha1");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_sha384,
-                               &spki::RSA_PKCS1_2048_8192_SHA256,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pkcs1_sha384,
+                               &spki::RSA_PKCS1_2048_8192_SHA384,
                                "rsa_2048",
-                               "pkcs",
+                               "pkcs1",
+                               "sha384",
+                               "rsa_4096",
+                               "sha1");
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pkcs1_sha512,
+                               &spki::RSA_PKCS1_2048_8192_SHA512,
+                               "rsa_2048",
+                               "pkcs1",
+                               "sha512",
+                               "rsa_4096",
+                               "sha1");
+// pss
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pss_sha256,
+                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               "rsa_2048",
+                               "pss",
                                "sha256",
                                "rsa_4096",
                                "sha1");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_sha512,
-                               &spki::RSA_PKCS1_2048_8192_SHA256,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pss_sha384,
+                               &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
                                "rsa_2048",
-                               "pkcs",
-                               "sha256",
+                               "pss",
+                               "sha384",
+                               "rsa_4096",
+                               "sha1");
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pss_sha512,
+                               &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+                               "rsa_2048",
+                               "pss",
+                               "sha512",
                                "rsa_4096",
                                "sha1");
 
@@ -329,104 +366,165 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_sha512,
 //                              &signature::RSA_PKCS1_SHA256,
 //                              &spki::RSA_PKCS1_2048_8192_SHA1,
 //                              "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha256_2048,
+// pkcs1
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha256_pkcs1_2048,
                           &signature::RSA_PKCS1_SHA256,
                           &spki::RSA_PKCS1_2048_8192_SHA256,
                           "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_2048,
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_pkcs1_2048,
                           &signature::RSA_PKCS1_SHA384,
                           &spki::RSA_PKCS1_2048_8192_SHA384,
                           "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha512_2048,
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha512_pkcs1_2048,
                           &signature::RSA_PKCS1_SHA512,
                           &spki::RSA_PKCS1_2048_8192_SHA512,
                           "rsa_4096");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha256_2048,
+// pss
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha256_pss_2048,
+                          &signature::RSA_PSS_SHA256,
+                          &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                          "rsa_4096");
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_pss_2048,
+                          &signature::RSA_PSS_SHA384,
+                          &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+                          "rsa_4096");
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha512_pss_2048,
+                          &signature::RSA_PSS_SHA512,
+                          &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+                          "rsa_4096");
+// pkcs1
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha256_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
                                "rsa_4096",
-                               "pkcs",
+                               "pkcs1",
                                "sha256",
                                "rsa_2048",
                                "sha1");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_2048,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
                                "rsa_4096",
-                               "pkcs",
+                               "pkcs1",
                                "sha256",
                                "rsa_2048",
                                "sha1");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha512_2048,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha512_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
                                "rsa_4096",
-                               "pkcs",
+                               "pkcs1",
+                               "sha256",
+                               "rsa_2048",
+                               "sha1");
+// pss
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha256_pss_2048,
+                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               "rsa_4096",
+                               "pss",
+                               "sha256",
+                               "rsa_2048",
+                               "sha1");
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pss_2048,
+                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               "rsa_4096",
+                               "pss",
+                               "sha256",
+                               "rsa_2048",
+                               "sha1");
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha512_pss_2048,
+                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               "rsa_4096",
+                               "pss",
                                "sha256",
                                "rsa_2048",
                                "sha1");
 
 // 4096 bit rsa in 3072_8192 modes
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_3072,
+// pkcs1
+test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_pkcs1_3072,
                           &signature::RSA_PKCS1_SHA384,
                           &spki::RSA_PKCS1_3072_8192_SHA384,
                           "rsa_4096");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_3072,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pkcs1_3072,
                                &spki::RSA_PKCS1_3072_8192_SHA384,
                                "rsa_4096",
-                               "pkcs",
+                               "pkcs1",
                                "sha384",
                                "rsa_2048",
                                "sha1");
+// TODO PSS for 3072-8192?
 
 // 8192 bit rsa in 2048_8192 modes
 // TODO loading 8192 key pairs isn't working
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha256_2048,
+//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha256_pkcs1_2048,
 //                              &signature::RSA_PKCS1_SHA256,
 //                              &spki::RSA_PKCS1_2048_8192_SHA256,
 //                              "rsa_8192");
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha384_2048,
+//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha384_pkcs1_2048,
 //                              &signature::RSA_PKCS1_SHA384,
 //                              &spki::RSA_PKCS1_2048_8192_SHA384,
 //                              "rsa_8192");
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha512_2048,
+//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha512_pkcs1_2048,
 //                              &signature::RSA_PKCS1_SHA512,
 //                              &spki::RSA_PKCS1_2048_8192_SHA512,
 //                              "rsa_8192");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha256_2048,
+// pkcs1
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha256_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
                                "rsa_8192",
-                               "pkcs",
+                               "pkcs1",
                                "sha256",
                                "rsa_2048",
                                "sha1");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_2048,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA384,
                                "rsa_8192",
-                               "pkcs",
+                               "pkcs1",
                                "sha384",
                                "rsa_2048",
                                "sha1");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha512_2048,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha512_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA512,
                                "rsa_8192",
-                               "pkcs",
+                               "pkcs1",
+                               "sha512",
+                               "rsa_2048",
+                               "sha1");
+// pss
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha256_pss_2048,
+                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               "rsa_8192",
+                               "pss",
+                               "sha256",
+                               "rsa_2048",
+                               "sha1");
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_pss_2048,
+                               &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+                               "rsa_8192",
+                               "pss",
+                               "sha384",
+                               "rsa_2048",
+                               "sha1");
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha512_pss_2048,
+                               &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+                               "rsa_8192",
+                               "pss",
                                "sha512",
                                "rsa_2048",
                                "sha1");
 
 // 8192 bit rsa in 3072_8192 modes
 //
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha384_3072,
+//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha384_pkcs1_3072,
 //                              &signature::RSA_PKCS1_SHA384,
 //                              &spki::RSA_PKCS1_3072_8192_SHA384,
 //                              "rsa_8192");
-test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_3072,
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_pkcs1_3072,
                                &spki::RSA_PKCS1_3072_8192_SHA384,
                                "rsa_8192",
-                               "pkcs",
+                               "pkcs1",
                                "sha384",
                                "rsa_2048",
                                "sha1");
 
-// TODO rsa pss padding
 
 // TODO ecdsa signing?
 // ecdsa p256
