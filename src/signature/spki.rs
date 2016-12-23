@@ -42,7 +42,7 @@ pub enum VerifyWithSPKIError {
 /// exported by OpenSSL. If you export an RSA or ECDSA public key from a keypair
 /// with `-pubout` and friends, you will get DER of an SPKI wrapper containing
 /// a public key. You could extract the bitstring of the key itself and use
-/// `signature:;verify`, but that is often inconvient.
+/// `signature::verify`, but that is often inconvient.
 pub fn verify(signature_alg: &Algorithm,
               public_key_spki: untrusted::Input,
               msg: untrusted::Input,

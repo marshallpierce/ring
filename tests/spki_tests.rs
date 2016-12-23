@@ -401,17 +401,17 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha256_pkc
                                "rsa_2048",
                                "sha1");
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pkcs1_2048,
-                               &spki::RSA_PKCS1_2048_8192_SHA256,
+                               &spki::RSA_PKCS1_2048_8192_SHA384,
                                "rsa_4096",
                                "pkcs1",
-                               "sha256",
+                               "sha384",
                                "rsa_2048",
                                "sha1");
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha512_pkcs1_2048,
-                               &spki::RSA_PKCS1_2048_8192_SHA256,
+                               &spki::RSA_PKCS1_2048_8192_SHA512,
                                "rsa_4096",
                                "pkcs1",
-                               "sha256",
+                               "sha512",
                                "rsa_2048",
                                "sha1");
 // pss
@@ -423,17 +423,17 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha256_pss
                                "rsa_2048",
                                "sha1");
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pss_2048,
-                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
                                "rsa_4096",
                                "pss",
-                               "sha256",
+                               "sha384",
                                "rsa_2048",
                                "sha1");
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha512_pss_2048,
-                               &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+                               &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
                                "rsa_4096",
                                "pss",
-                               "sha256",
+                               "sha512",
                                "rsa_2048",
                                "sha1");
 
