@@ -91,6 +91,7 @@ define_type!(long, i32, test_long_metrics, GFp_long_align, GFp_long_size,
 define_type!(long, i64, test_long_metrics, GFp_long_align, GFp_long_size,
              "The C `long` type. Equivalent to `libc::c_long`.");
 
+
 define_type!(
   size_t, usize, test_size_t_metrics, GFp_size_t_align, GFp_size_t_size,
   "The C `size_t` type from `<stdint.h>`.
