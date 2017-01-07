@@ -46,13 +46,19 @@ extern "C" {
     /// fails or the type is not found, sets success to false and returns 0.
     #[cfg(target_os="linux")]
     pub fn getauxval_wrapper(auxv_type: AuxvUnsignedLongNative,
-                             success: *mut u8)
-         -> AuxvUnsignedLongNative;
+                             success: *mut AuxvUnsignedLongNative) -> i32;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum GetauxvalError {
+    FunctionNotAvailable,
+    NotFound,
+    UnknownError
 }
 
 pub trait GetauxvalProvider {
     fn getauxval(&self, auxv_type: AuxvUnsignedLongNative)
-        -> Option<AuxvUnsignedLongNative>;
+        -> Result<AuxvUnsignedLongNative, GetauxvalError>;
 }
 
 #[cfg(target_os="linux")]
@@ -63,16 +69,17 @@ impl GetauxvalProvider for NativeGetauxvalProvider {
     /// Returns Some if the native invocation succeeds and the requested type was
     /// found, otherwise None.
     fn getauxval(&self, auxv_type: AuxvUnsignedLongNative)
-            -> Option<AuxvUnsignedLongNative> {
-        let mut success = 0;
+            -> Result<AuxvUnsignedLongNative, GetauxvalError> {
+
+        let mut result = 0;
         unsafe {
-            let result = getauxval_wrapper(auxv_type, &mut success);
-            if success == 1 {
-                return Some(result);
+            return match getauxval_wrapper(auxv_type, &mut result) {
+                1 => Ok(result),
+                0 => Err(GetauxvalError::NotFound),
+                -1 => Err(GetauxvalError::FunctionNotAvailable),
+                _ => Err(GetauxvalError::UnknownError)
             }
         }
-
-        None
     }
 }
 
@@ -175,8 +182,8 @@ mod tests {
     use std::path::Path;
     use super::{AuxValError, AuxvTypes, search_procfs_auxv};
     #[cfg(target_os="linux")]
-    use super::{AuxvUnsignedLongNative, GetauxvalProvider,
-        NativeGetauxvalProvider};
+    use super::{AuxvUnsignedLongNative, GetauxvalError,
+        GetauxvalProvider, NativeGetauxvalProvider};
 
     use self::byteorder::LittleEndian;
 
@@ -193,7 +200,6 @@ mod tests {
     fn test_getauxv_hwcap_linux_finds_hwcap() {
         let native_getauxval = NativeGetauxvalProvider{};
         let result = native_getauxval.getauxval(AuxvTypes::new().AT_HWCAP);
-        assert!(result.is_some());
         // there should be SOMETHING in the value
         assert!(result.unwrap() > 0);
     }
@@ -203,8 +209,9 @@ mod tests {
     fn test_getauxv_hwcap_linux_doesnt_find_bogus_type() {
         let native_getauxval = NativeGetauxvalProvider{};
 
-        assert!(native_getauxval.getauxval(
-            AuxvUnsignedLongNative::from(555555555_u32)).is_none());
+        // AT_NULL aka 0 is effectively the EOF for auxv, so it's never a valid type
+        assert_eq!(GetauxvalError::NotFound, native_getauxval.getauxval(
+            AuxvUnsignedLongNative::from(0_u32)).unwrap_err());
     }
 
     #[test]

@@ -98,7 +98,7 @@ fn armcap_bits<G: GetauxvalProvider> (cpuinfo: &CpuInfo,
     // https://android.googlesource.com/platform/ndk/+/882ac8f3392858991a0e1af33b4b7387ec856bd2
     // and b/13679666 (Google-internal) for details. */
 
-    if let Some(v) = getauxval_provider.getauxval(auxval_types.AT_HWCAP) {
+    if let Ok(v) = getauxval_provider.getauxval(auxval_types.AT_HWCAP) {
         hwcap = v;
     } else if let Some(v) = procfs_auxv.get(&auxval_types.AT_HWCAP) {
         hwcap = *v;
@@ -120,7 +120,7 @@ fn armcap_bits<G: GetauxvalProvider> (cpuinfo: &CpuInfo,
         // /proc/cpuinfo. See https://crbug.com/596156
 
         let mut hwcap2 = AuxvUnsignedLongNative::from(0_u32);
-        if let Some(v) = getauxval_provider.getauxval(auxval_types.AT_HWCAP2) {
+        if let Ok(v) = getauxval_provider.getauxval(auxval_types.AT_HWCAP2) {
             hwcap2 = v;
         } else if let Some(v) = procfs_auxv.get(&auxval_types.AT_HWCAP2) {
             hwcap2 = *v;
@@ -236,7 +236,7 @@ mod tests {
         ARMV8_PMULL, ARMV8_SHA1, ARMV8_SHA256};
     use super::cpuinfo::{parse_cpuinfo_reader, CpuInfo, CpuInfoError};
     use super::auxv::{AuxvTypes, AuxVals, AuxvUnsignedLongNative,
-        GetauxvalProvider};
+        GetauxvalError, GetauxvalProvider};
 
     struct StubGetauxvalProvider {
         auxv: AuxVals<AuxvUnsignedLongNative>
@@ -244,8 +244,8 @@ mod tests {
 
     impl GetauxvalProvider for StubGetauxvalProvider {
         fn getauxval(&self, auxv_type: AuxvUnsignedLongNative)
-                -> Option<AuxvUnsignedLongNative> {
-            self.auxv.get(&auxv_type).map(|v| *v)
+                -> Result<AuxvUnsignedLongNative, GetauxvalError> {
+            self.auxv.get(&auxv_type).map(|v| *v).ok_or(GetauxvalError::NotFound)
         }
     }
 
