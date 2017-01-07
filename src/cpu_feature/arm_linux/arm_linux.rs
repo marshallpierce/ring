@@ -55,28 +55,30 @@ extern "C" {
 
 #[cfg(all(any(target_arch = "arm", target_arch = "aarch64"),
     target_os="linux"))]
-#[allow(non_snake_case)]
-extern "C" fn GFp_cpuid_setup() {
+pub fn arm_linux_set_cpu_features() {
     let auxv_types: AuxvTypes<AuxvUnsignedLongNative> = AuxvTypes::new();
     let hwcap_features: ArmHwcapFeatures<AuxvUnsignedLongNative>
         = ArmHwcapFeatures::new();
-    if let Ok(c) = parse_cpuinfo() {
-        // if we can't load procfs auxv, just let it be empty
-        let procfs_auxv = match
-                auxv::search_procfs_auxv::<AuxvUnsignedLongNative, NativeEndian>
-                    (&Path::from("/proc/self/auxv"),
-                     &[auxv_types.AT_HWCAP, auxv_types.AT_HWCAP2]) {
-            Ok(auxv) => auxv,
-            Err(_) => AuxVals::<AuxvUnsignedLongNative>::new()
-        };
+    let cpu_info = match parse_cpuinfo() {
+        Ok(c) => c,
+        Err(_) => { return; }
+    };
 
-        let getauxval = NativeGetauxvalProvider{};
-        let armcap =
-            armcap_bits::<NativeGetauxvalProvider>(&c, &procfs_auxv, auxv_types,
-                                                   hwcap_features, getauxval);
-        unsafe {
-            GFp_armcap_P |= armcap;
-        }
+    // if we can't load procfs auxv, just let it be empty
+    let procfs_auxv = match
+            auxv::search_procfs_auxv::<AuxvUnsignedLongNative, NativeEndian>
+                (&Path::from("/proc/self/auxv"),
+                 &[auxv_types.AT_HWCAP, auxv_types.AT_HWCAP2]) {
+        Ok(auxv) => auxv,
+        Err(_) => AuxVals::<AuxvUnsignedLongNative>::new()
+    };
+
+    let getauxval = NativeGetauxvalProvider{};
+    let armcap =
+        armcap_bits::<NativeGetauxvalProvider>(&c, &procfs_auxv, auxv_types,
+                                               hwcap_features, getauxval);
+    unsafe {
+        GFp_armcap_P |= armcap;
     }
 }
 
