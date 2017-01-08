@@ -1,4 +1,4 @@
-extern crate byteorder;
+pub extern crate byteorder;
 
 use std;
 use std::collections::HashMap;

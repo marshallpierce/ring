@@ -1,7 +1,9 @@
 use std::collections::HashMap;
-#[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux"))]
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 use std::fs::File;
-#[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux"))]
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 use std::io::BufReader;
 use std::io::BufRead;
 use std::string::{String, ToString};
@@ -14,7 +16,8 @@ pub enum CpuInfoError {
 
 pub type CpuInfo = HashMap<String, String>;
 
-#[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux"))]
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 pub fn parse_cpuinfo() -> Result<CpuInfo, CpuInfoError> {
     match File::open("/proc/cpuinfo").map(|f| BufReader::new(f)) {
         Ok(mut r) => parse_cpuinfo_reader(&mut r),

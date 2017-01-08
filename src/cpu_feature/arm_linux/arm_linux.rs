@@ -1,12 +1,22 @@
 use std::collections::HashSet;
 use std::string::{String, ToString};
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
+use std::path::Path;
 use self::auxv::AuxvUnsignedLong;
-#[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux"))]
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
+use self::auxv::byteorder::NativeEndian;
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 use self::auxv::NativeGetauxvalProvider;
-#[cfg(any(test, all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
-use self::auxv::{AuxVals, AuxvTypes, AuxvUnsignedLongNative, GetauxvalProvider};
+#[cfg(any(test,
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
+use self::auxv::{AuxVals, AuxvTypes, AuxvUnsignedLongNative, GetauxvalError,
+    GetauxvalProvider};
 use self::cpuinfo::CpuInfo;
-#[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux"))]
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 use self::cpuinfo::parse_cpuinfo;
 
 // Bits exposed in HWCAP and HWCAP2 auxv values
@@ -56,41 +66,59 @@ extern "C" {
 #[cfg(all(any(target_arch = "arm", target_arch = "aarch64"),
     target_os="linux"))]
 pub fn arm_linux_set_cpu_features() {
+    unsafe {
+        GFp_armcap_P |= armcap_from_env();
+    }
+}
+
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
+fn armcap_from_env() -> u32 {
     let auxv_types: AuxvTypes<AuxvUnsignedLongNative> = AuxvTypes::new();
     let hwcap_features: ArmHwcapFeatures<AuxvUnsignedLongNative>
         = ArmHwcapFeatures::new();
     let cpu_info = match parse_cpuinfo() {
         Ok(c) => c,
-        Err(_) => { return; }
-    };
-
-    // if we can't load procfs auxv, just let it be empty
-    let procfs_auxv = match
-            auxv::search_procfs_auxv::<AuxvUnsignedLongNative, NativeEndian>
-                (&Path::from("/proc/self/auxv"),
-                 &[auxv_types.AT_HWCAP, auxv_types.AT_HWCAP2]) {
-        Ok(auxv) => auxv,
-        Err(_) => AuxVals::<AuxvUnsignedLongNative>::new()
+        Err(_) => { return 0; }
     };
 
     let getauxval = NativeGetauxvalProvider{};
-    let armcap =
-        armcap_bits::<NativeGetauxvalProvider>(&c, &procfs_auxv, auxv_types,
-                                               hwcap_features, getauxval);
-    unsafe {
-        GFp_armcap_P |= armcap;
-    }
+
+    // only try procfs if we can't use getauxval
+    let getauxval_works = match getauxval.getauxval(auxv_types.AT_HWCAP) {
+        Ok(_) => true,
+        Err(GetauxvalError::FunctionNotAvailable) => false,
+        Err(_) => true
+    };
+
+    let procfs_auxv = if getauxval_works {
+        // use empty auxv if getauxval is working
+        AuxVals::<AuxvUnsignedLongNative >::new()
+    } else {
+        // read procfs once
+        match auxv::search_procfs_auxv::<AuxvUnsignedLongNative, NativeEndian>
+            (&Path::new("/proc/self/auxv"),
+             &[auxv_types.AT_HWCAP, auxv_types.AT_HWCAP2]) {
+            Ok(auxv) => auxv,
+            Err(_) => AuxVals::<AuxvUnsignedLongNative >::new()
+        }
+    };
+
+    armcap_from_features::<NativeGetauxvalProvider>(&cpu_info, &procfs_auxv,
+                                                    auxv_types, hwcap_features,
+                                                    getauxval)
 }
+
 
 /// returns a u32 with bits set for use in GFp_armcap_P
 #[cfg(any(test, all(any(target_arch = "arm", target_arch = "aarch64"),
     target_os="linux")))]
-fn armcap_bits<G: GetauxvalProvider> (cpuinfo: &CpuInfo,
-                                      procfs_auxv: &AuxVals<AuxvUnsignedLongNative>,
-                                      auxval_types: AuxvTypes<AuxvUnsignedLongNative>,
-                                      hwcap_features: ArmHwcapFeatures<AuxvUnsignedLongNative>,
-                                      getauxval_provider: G)
-        -> u32 {
+fn armcap_from_features<G: GetauxvalProvider> (cpuinfo: &CpuInfo,
+                                               procfs_auxv: &AuxVals<AuxvUnsignedLongNative>,
+                                               auxval_types: AuxvTypes<AuxvUnsignedLongNative>,
+                                               hwcap_features: ArmHwcapFeatures<AuxvUnsignedLongNative>,
+                                               getauxval_provider: G)
+                                               -> u32 {
     let mut hwcap = AuxvUnsignedLongNative::from(0_u32);
 
     // |getauxval| is not available on Android until API level 20. If it is
@@ -234,8 +262,8 @@ mod tests {
     use std::string::{String, ToString};
     use std::vec::Vec;
 
-    use super::{armcap_bits, ArmHwcapFeatures, ARMV7_NEON, ARMV8_AES,
-        ARMV8_PMULL, ARMV8_SHA1, ARMV8_SHA256};
+    use super::{armcap_from_features, armcap_from_env, ArmHwcapFeatures,
+        ARMV7_NEON, ARMV8_AES, ARMV8_PMULL, ARMV8_SHA1, ARMV8_SHA256};
     use super::cpuinfo::{parse_cpuinfo_reader, CpuInfo, CpuInfoError};
     use super::auxv::{AuxvTypes, AuxVals, AuxvUnsignedLongNative,
         GetauxvalError, GetauxvalProvider};
@@ -249,6 +277,12 @@ mod tests {
                 -> Result<AuxvUnsignedLongNative, GetauxvalError> {
             self.auxv.get(&auxv_type).map(|v| *v).ok_or(GetauxvalError::NotFound)
         }
+    }
+
+    #[test]
+    fn armcap_from_env_doesnt_crash() {
+        // can't really say anything useful about its result
+        let _ = armcap_from_env();
     }
 
     #[test]
@@ -461,10 +495,10 @@ mod tests {
         let cpuinfo = parse_cpuinfo_file(Path::new(path)).unwrap();
 
         assert_eq!(expected_armcap,
-            armcap_bits::<StubGetauxvalProvider>(&cpuinfo, proc_auxv,
-                                                 native_auxv_types(),
-                                                 native_hwcap_features(),
-                                                 getauxval));
+            armcap_from_features::<StubGetauxvalProvider>(&cpuinfo, proc_auxv,
+                                                          native_auxv_types(),
+                                                          native_hwcap_features(),
+                                                          getauxval));
     }
 
     fn parse_cpuinfo_file(path: &Path) -> Result<CpuInfo, CpuInfoError> {
