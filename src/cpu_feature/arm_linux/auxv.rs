@@ -26,8 +26,10 @@ extern "C" {
 
 #[derive(Debug, PartialEq)]
 pub enum GetauxvalError {
+    #[cfg(target_os="linux")]
     FunctionNotAvailable,
     NotFound,
+    #[cfg(target_os="linux")]
     UnknownError
 }
 
@@ -150,10 +152,10 @@ mod tests {
     use std::path::Path;
     #[cfg(target_pointer_width = "64")]
     use super::AuxValError;
-    use super::{search_procfs_auxv, AuxvUnsignedLong};
+    use super::{search_procfs_auxv, AuxvUnsignedLong, AT_HWCAP, AT_HWCAP2};
     #[cfg(target_os="linux")]
     use super::{GetauxvalError, GetauxvalProvider,
-        NativeGetauxvalProvider, AT_HWCAP, AT_HWCAP2};
+        NativeGetauxvalProvider};
 
     use self::byteorder::LittleEndian;
 

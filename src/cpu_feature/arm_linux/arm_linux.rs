@@ -7,10 +7,12 @@ use self::auxv::AuxvUnsignedLong;
 #[cfg(any(all(target_os="linux", test),
     all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 use self::auxv::byteorder::NativeEndian;
+#[cfg(any(all(target_os="linux", test),
+    all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
+use self::auxv::{GetauxvalError, NativeGetauxvalProvider};
 #[cfg(any(test,
     all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
-use self::auxv::{AT_HWCAP, AT_HWCAP2, AuxVals, GetauxvalError,
-    GetauxvalProvider, NativeGetauxvalProvider};
+use self::auxv::{AT_HWCAP, AT_HWCAP2, AuxVals, GetauxvalProvider};
 use self::cpuinfo::CpuInfo;
 #[cfg(any(all(target_os="linux", test),
     all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
@@ -227,7 +229,9 @@ mod tests {
     use std::string::{String, ToString};
     use std::vec::Vec;
 
-    use super::{armcap_from_features, armcap_from_env, ARMV7_NEON,
+    #[cfg(target_os="linux")]
+    use super::armcap_from_env;
+    use super::{armcap_from_features, ARMV7_NEON,
         ARMV8_AES, ARMV8_PMULL, ARMV8_SHA1, ARMV8_SHA256, ARM_HWCAP2_AES,
         ARM_HWCAP2_PMULL, ARM_HWCAP2_SHA1, ARM_HWCAP2_SHA2,
         ARM_HWCAP_NEON};
@@ -247,6 +251,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os="linux")]
     fn armcap_from_env_doesnt_crash() {
         // can't really say anything useful about its result
         let _ = armcap_from_env();
