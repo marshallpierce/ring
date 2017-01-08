@@ -84,7 +84,6 @@ fn armcap_from_env() -> u32 {
 
     let getauxval = NativeGetauxvalProvider{};
 
-    // only try procfs if we can't use getauxval
     let getauxval_works = match getauxval.getauxval(auxv_types.AT_HWCAP) {
         Ok(_) => true,
         Err(GetauxvalError::FunctionNotAvailable) => false,
@@ -95,7 +94,6 @@ fn armcap_from_env() -> u32 {
         // use empty auxv if getauxval is working
         AuxVals::<AuxvUnsignedLongNative >::new()
     } else {
-        // read procfs once
         match auxv::search_procfs_auxv::<AuxvUnsignedLongNative, NativeEndian>
             (&Path::new("/proc/self/auxv"),
              &[auxv_types.AT_HWCAP, auxv_types.AT_HWCAP2]) {

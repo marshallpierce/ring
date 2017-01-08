@@ -19,10 +19,11 @@ pub type CpuInfo = HashMap<String, String>;
 #[cfg(any(all(target_os="linux", test),
     all(any(target_arch = "arm", target_arch = "aarch64"), target_os="linux")))]
 pub fn parse_cpuinfo() -> Result<CpuInfo, CpuInfoError> {
-    match File::open("/proc/cpuinfo").map(|f| BufReader::new(f)) {
-        Ok(mut r) => parse_cpuinfo_reader(&mut r),
-        Err(_) => Err(CpuInfoError::IoError)
-    }
+    let mut r = try!(File::open("/proc/cpuinfo")
+        .map(|f| BufReader::new(f))
+        .map_err(|_| CpuInfoError::IoError));
+
+    parse_cpuinfo_reader(&mut r)
 }
 
 /// parse the contents of /proc/cpuinfo into a map of field names to values.
