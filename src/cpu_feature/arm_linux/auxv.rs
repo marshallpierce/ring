@@ -26,14 +26,21 @@ extern "C" {
 
 #[derive(Debug, PartialEq)]
 pub enum GetauxvalError {
+    /// getauxval() is not available at runtime
     #[cfg(target_os="linux")]
     FunctionNotAvailable,
+    /// getauxval() could not find the requested type
     NotFound,
+    /// getauxval() encountered a different error
     #[cfg(target_os="linux")]
     UnknownError
 }
 
 pub trait GetauxvalProvider {
+    /// Look up an entry in the auxiliary vector. See getauxval(3) in glibc.
+    /// Unfortunately, prior to glibc 2.19, getauxval() returns 0 without
+    /// setting `errno` if the type is not found, so on such old systems
+    /// this will return `Ok(0)` rather than `Err(GetauxvalError::NotFound)`.
     fn getauxval(&self, auxv_type: AuxvUnsignedLong)
         -> Result<AuxvUnsignedLong, GetauxvalError>;
 }
@@ -54,7 +61,8 @@ impl GetauxvalProvider for NativeGetauxvalProvider {
                 1 => Ok(result),
                 0 => Err(GetauxvalError::NotFound),
                 -1 => Err(GetauxvalError::FunctionNotAvailable),
-                _ => Err(GetauxvalError::UnknownError)
+                -2 => Err(GetauxvalError::UnknownError),
+                x => panic!("getauxval_wrapper returned an unexpected value: {}", x)
             }
         }
     }
@@ -69,7 +77,7 @@ pub const AT_HWCAP2: AuxvUnsignedLong = 26;
 pub type AuxVals = HashMap<AuxvUnsignedLong, AuxvUnsignedLong>;
 
 #[derive(Debug, PartialEq)]
-pub enum AuxValError {
+pub enum ProcfsAuxvError {
     IoError,
     InvalidFormat
 }
@@ -84,9 +92,9 @@ pub enum AuxValError {
 /// requested that also had values in the aux vector
 pub fn search_procfs_auxv<B: ByteOrder>(path: &Path,
                                         aux_types: &[AuxvUnsignedLong])
-                                        -> Result<AuxVals, AuxValError> {
+                                        -> Result<AuxVals, ProcfsAuxvError> {
     let mut input = File::open(path)
-        .map_err(|_| AuxValError::IoError)
+        .map_err(|_| ProcfsAuxvError::IoError)
         .map(|f| BufReader::new(f))?;
 
     let ulong_size = std::mem::size_of::<AuxvUnsignedLong>();
@@ -107,20 +115,20 @@ pub fn search_procfs_auxv<B: ByteOrder>(path: &Path,
                 Ok(n) => {
                     if n == 0 {
                         // should not hit EOF before AT_NULL
-                        return Err(AuxValError::InvalidFormat)
+                        return Err(ProcfsAuxvError::InvalidFormat)
                     }
 
                     read_bytes += n;
                 }
-                Err(_) => return Err(AuxValError::IoError)
+                Err(_) => return Err(ProcfsAuxvError::IoError)
             }
         }
 
         let mut reader = &buf[..];
         let found_aux_type = read_long::<B>(&mut reader)
-            .map_err(|_| AuxValError::InvalidFormat)?;
+            .map_err(|_| ProcfsAuxvError::InvalidFormat)?;
         let aux_val = read_long::<B>(&mut reader)
-            .map_err(|_| AuxValError::InvalidFormat)?;
+            .map_err(|_| ProcfsAuxvError::InvalidFormat)?;
 
         if aux_types.contains(&found_aux_type) {
             let _ = result.insert(found_aux_type, aux_val);
@@ -151,7 +159,7 @@ mod tests {
 
     use std::path::Path;
     #[cfg(target_pointer_width = "64")]
-    use super::AuxValError;
+    use super::ProcfsAuxvError;
     use super::{search_procfs_auxv, AuxvUnsignedLong, AT_HWCAP, AT_HWCAP2};
     #[cfg(target_os="linux")]
     use super::{GetauxvalError, GetauxvalProvider,
@@ -227,7 +235,7 @@ mod tests {
         let path = Path::new("src/cpu_feature/arm_linux/test-data/macos-virtualbox-linux-x86-4850HQ.auxv");
         let vals = search_procfs_auxv::<LittleEndian>(path, &[AT_HWCAP, AT_HWCAP2, AT_UID]);
 
-        assert_eq!(Err(AuxValError::InvalidFormat), vals);
+        assert_eq!(Err(ProcfsAuxvError::InvalidFormat), vals);
     }
 
     #[test]
@@ -252,7 +260,7 @@ mod tests {
     #[cfg(target_pointer_width = "64")]
     fn test_parse_auxv_real_linux_half_of_trailing_null_missing_error() {
         let path = Path::new("src/cpu_feature/arm_linux/test-data/linux-x64-i7-6850k-mangled-no-value-in-trailing-null.auxv");
-        assert_eq!(AuxValError::InvalidFormat,
+        assert_eq!(ProcfsAuxvError::InvalidFormat,
             search_procfs_auxv::<LittleEndian>(path, &[555555555]).unwrap_err());
     }
 
@@ -260,7 +268,7 @@ mod tests {
     #[cfg(target_pointer_width = "64")]
     fn test_parse_auxv_real_linux_trailing_null_missing_error() {
         let path = Path::new("src/cpu_feature/arm_linux/test-data/linux-x64-i7-6850k-mangled-no-trailing-null.auxv");
-        assert_eq!(AuxValError::InvalidFormat,
+        assert_eq!(ProcfsAuxvError::InvalidFormat,
             search_procfs_auxv::<LittleEndian>(path, &[555555555]).unwrap_err());
     }
 
@@ -268,7 +276,7 @@ mod tests {
     #[cfg(target_pointer_width = "64")]
     fn test_parse_auxv_real_linux_truncated_entry_error() {
         let path = Path::new("src/cpu_feature/arm_linux/test-data/linux-x64-i7-6850k-mangled-truncated-entry.auxv");
-        assert_eq!(AuxValError::InvalidFormat,
+        assert_eq!(ProcfsAuxvError::InvalidFormat,
             search_procfs_auxv::<LittleEndian>(path, &[555555555]).unwrap_err());
     }
 }
