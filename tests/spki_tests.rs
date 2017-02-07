@@ -18,6 +18,10 @@ use ring::rand;
 
 // TODO: The expected results need to be modified for SHA-1 deprecation.
 
+// Many tests in this file use sample data from the `tests/test-data` directory. It has
+// messages, digests, keys, and signatures in various combinations of algorithms generated
+// by the openssl CLI via the `gen-test-signatures.sh` script.
+
 macro_rules! test_verify_signature_pem {
     ($fn_name:ident, $file_name:expr, $signature_alg:expr, $expected_result:expr) => {
         #[test]
