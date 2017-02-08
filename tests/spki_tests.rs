@@ -1,13 +1,11 @@
 extern crate ring;
 extern crate untrusted;
-extern crate rustc_serialize;
 
 use std::io::BufRead;
 use std::path::Path;
 use std::vec::Vec;
 use std::io::Read;
 use std::fs::File;
-use rustc_serialize::base64::FromBase64;
 use ring::der;
 use ring::signature::spki;
 use ring::signature::spki::VerifyWithSPKIError;
@@ -15,6 +13,9 @@ use ring::signature::spki::VerifyWithSPKIError;
 use ring::signature;
 #[cfg(feature = "rsa_signing")]
 use ring::rand;
+
+mod common;
+use common::pem;
 
 // TODO: The expected results need to be modified for SHA-1 deprecation.
 
@@ -666,9 +667,9 @@ fn parse_test_signed_data(file_name: &str) -> TestSignedData {
     let file = std::fs::File::open(path).unwrap();
     let mut lines = std::io::BufReader::new(&file).lines();
 
-    let spki = read_pem_section(&mut lines, "PUBLIC KEY");
-    let data = read_pem_section(&mut lines, "DATA");
-    let signature = read_pem_section(&mut lines, "SIGNATURE");
+    let spki = pem::read_pem_section(&mut lines, "PUBLIC KEY");
+    let data = pem::read_pem_section(&mut lines, "DATA");
+    let signature = pem::read_pem_section(&mut lines, "SIGNATURE");
 
     TestSignedData {
         spki: spki,
@@ -677,29 +678,3 @@ fn parse_test_signed_data(file_name: &str) -> TestSignedData {
     }
 }
 
-type FileLines<'a> = std::io::Lines<std::io::BufReader<&'a std::fs::File>>;
-
-fn read_pem_section(lines: & mut FileLines, section_name: &str)
-                        -> std::vec::Vec<u8> {
-    // Skip comments and header
-    let begin_section = format!("-----BEGIN {}-----", section_name);
-    loop {
-        let line = lines.next().unwrap().unwrap();
-        if line == begin_section {
-            break;
-        }
-    }
-
-    let mut base64 = std::string::String::new();
-
-    let end_section = format!("-----END {}-----", section_name);
-    loop {
-        let line = lines.next().unwrap().unwrap();
-        if line == end_section {
-            break;
-        }
-        base64.push_str(&line);
-    }
-
-    base64.from_base64().unwrap()
-}

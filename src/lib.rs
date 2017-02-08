@@ -116,9 +116,6 @@ extern crate std;
 
 extern crate untrusted;
 
-#[cfg(test)]
-extern crate rustc_serialize;
-
 #[macro_use]
 mod bssl;
 

@@ -192,12 +192,10 @@ pub fn positive_integer<'a>(input: &mut untrusted::Reader<'a>)
 
 #[cfg(test)]
 pub mod tests {
-    use std;
     use std::io::BufRead;
     use error;
     use super::*;
     use untrusted;
-    use rustc_serialize::base64::FromBase64;
 
     fn with_good_i<F, R>(value: &[u8], f: F)
                          where F: FnOnce(&mut untrusted::Reader)
@@ -213,32 +211,7 @@ pub mod tests {
         assert!(r.is_err());
     }
 
-    type FileLines<'a> = std::io::Lines<std::io::BufReader<&'a std::fs::File>>;
-
-    fn read_pem_section(lines: & mut FileLines, section_name: &str)
-                        -> std::vec::Vec<u8> {
-        // Skip comments and header
-        let begin_section = format!("-----BEGIN {}-----", section_name);
-        loop {
-            let line = lines.next().unwrap().unwrap();
-            if line == begin_section {
-                break;
-            }
-        }
-
-        let mut base64 = std::string::String::new();
-
-        let end_section = format!("-----END {}-----", section_name);
-        loop {
-            let line = lines.next().unwrap().unwrap();
-            if line == end_section {
-                break;
-            }
-            base64.push_str(&line);
-        }
-
-        base64.from_base64().unwrap()
-    }
+    include!("../tests/common/pem.rs");
 
     macro_rules! test_parse_bad_spki_der {
         ($fn_name:ident, $file_name:expr) => {

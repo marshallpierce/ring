@@ -268,8 +268,9 @@ untrusted = "0.3.2"
 
 [target.'cfg(any(target_os = "redox", all(unix, not(any(target_os = "macos", target_os = "ios")))))'.dependencies]
 lazy_static = "0.2.1"
+
 [dev-dependencies]
-rustc-serialize = "0.3.15"
+base64 = "0.3.0"
 
 [features]
 # These features are documented in the top-level module's documentation.
