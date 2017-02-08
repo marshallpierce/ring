@@ -20,12 +20,8 @@ use std::io::{BufRead, Read};
 use std::path::Path;
 use std::vec::Vec;
 use ring::der;
-#[cfg(feature = "rsa_signing")]
-use ring::rand;
 use ring::signature::spki;
 use ring::signature::spki::VerifyWithSPKIError;
-#[cfg(feature = "rsa_signing")]
-use ring::signature;
 
 mod common;
 use common::pem;

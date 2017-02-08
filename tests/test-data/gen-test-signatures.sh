@@ -32,6 +32,7 @@ do
     openssl rsa -inform pem -in keys/rsa_${rsa_key_len}.pem -outform der -out keys/rsa_${rsa_key_len}.der
     openssl rsa -inform der -in keys/rsa_${rsa_key_len}.der -outform der -pubout \
         -out keys/rsa_${rsa_key_len}_pub_spki.der
+    rm -rf keys/*.pem
 
     for message_file in "${messages[@]}"
     do
@@ -45,12 +46,12 @@ do
                     extra_args=""
                 fi
 
-                # only takes pem keys
-                openssl dgst "-${digest_alg}" -sign "keys/rsa_${rsa_key_len}.pem" \
+                openssl dgst "-${digest_alg}" -sign "keys/rsa_${rsa_key_len}.der" \
+                    -keyform DER \
                     -sigopt "rsa_padding_mode:${rsa_padding_mode}" \
                     ${extra_args} \
                     -out "signatures/${message_file}_rsa_${rsa_key_len}_${rsa_padding_mode}_${digest_alg}_sig.bin" \
-                     "messages/${message_file}.bin"
+                    "messages/${message_file}.bin"
             done
         done
     done
@@ -60,8 +61,7 @@ done
 for ec_curve in "${ec_curves[@]}"
 do
     # confusingly, the -noout here means "output the key, not the curve parameters"
-    openssl ecparam -name ${ec_curve} -noout -out keys/ecdsa_${ec_curve}.pem -genkey
-    openssl ec -in keys/ecdsa_${ec_curve}.pem -outform der -out keys/ecdsa_${ec_curve}.der
+    openssl ecparam -name ${ec_curve} -noout -outform DER -out keys/ecdsa_${ec_curve}.der -genkey
     openssl ec -inform der -in keys/ecdsa_${ec_curve}.der -outform der -pubout \
         -out keys/ecdsa_${ec_curve}_pub_spki.der
 
@@ -69,9 +69,10 @@ do
     do
         for digest_alg in "${digest_algs[@]}"
         do
-            # only takes pem keys
-            openssl dgst "-${digest_alg}" -sign "keys/ecdsa_${ec_curve}.pem" \
-                -out "signatures/${message_file}_ecdsa_${ec_curve}_${digest_alg}_sig.bin" "messages/${message_file}.bin"
+            openssl dgst "-${digest_alg}" -sign "keys/ecdsa_${ec_curve}.der" \
+                -keyform DER \
+                -out "signatures/${message_file}_ecdsa_${ec_curve}_${digest_alg}_sig.bin" \
+                "messages/${message_file}.bin"
         done
     done
 done
