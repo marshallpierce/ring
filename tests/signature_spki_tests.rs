@@ -258,11 +258,16 @@ fn read_file_completely(path: &Path) -> Vec<u8> {
     return vec;
 }
 
-// TODO sha1 support?
-
 // 2048 bit rsa
 
 // pkcs1
+test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pkcs1_sha1,
+                               &spki::RSA_PKCS1_2048_8192_SHA1,
+                               "rsa_2048",
+                               "pkcs1",
+                               "sha1",
+                               "rsa_4096",
+                               "sha256");
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pkcs1_sha256,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
                                "rsa_2048",
