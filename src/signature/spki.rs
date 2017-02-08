@@ -31,18 +31,20 @@ pub enum VerifyWithSPKIError {
     UnsupportedSignatureAlgorithmForPublicKey,
 }
 
-/// Verify the signature `signature` of message `msg` with the public key
+/// Verifies the signature `signature` of message `msg` with the public key
 /// `spki_public_key` using the algorithm `alg`.
-/// `signature::verify` is suitable when the public key bytes you have are the
-/// DER ASN.1 of the key. This method is suitable when the public key is in
-/// SubjectPublicKeyInfo form (https://tools.ietf.org/html/rfc5280#section-4.1),
-/// which is a wrapper containing both the key and an identifier.
 ///
-/// A common situation where this encoding is encountered is when using public keys
-/// exported by OpenSSL. If you export an RSA or ECDSA public key from a keypair
-/// with `-pubout` and friends, you will get DER of an SPKI wrapper containing
-/// a public key. You could extract the bitstring of the key itself and use
-/// `signature::verify`, but that is often inconvient.
+/// `spki_public_key` must be the DER-encoded ASN.1 `SubjectPublicKeyInfo`
+/// described in [RFC 5280 Section 4.1], which is a sequence of an
+/// `AlgorithmIdentifier` and the key value. Use `ring::signature::verify()` for
+/// the case where you have only the encoded key value.
+///
+/// [RFC 5280 Section 4.1]: https://tools.ietf.org/html/rfc5280#section-4.1
+///
+/// A common situation where this encoding is encountered is when using public
+/// keys exported by OpenSSL. If you export an RSA or ECDSA public key from a
+/// keypair with `-pubout` and friends, you will get DER-encoded
+/// `SubjectPublicKeyInfo`.
 pub fn verify(signature_alg: &Algorithm,
               public_key_spki: untrusted::Input,
               msg: untrusted::Input,

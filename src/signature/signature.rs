@@ -332,6 +332,11 @@ pub trait VerificationAlgorithm: Sync + private::Private {
 /// Verify the signature `signature` of message `msg` with the public key
 /// `public_key` using the algorithm `alg`.
 ///
+/// `public_key` must be the DER-encoded ASN.1 of the key value only. Use
+/// `ring::signature::spki::verify` for the case when you have the
+/// `SubjectPublicKeyInfo` ASN.1, as is typically the case when using
+/// public keys exported by OpenSSL.
+///
 /// # Examples
 ///
 /// ## Verify a RSA PKCS#1 signature that uses the SHA-256 digest
