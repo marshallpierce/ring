@@ -1,18 +1,17 @@
 extern crate ring;
 extern crate untrusted;
 
-use std::io::BufRead;
+use std::fs::File;
+use std::io::{BufRead, Read};
 use std::path::Path;
 use std::vec::Vec;
-use std::io::Read;
-use std::fs::File;
 use ring::der;
+#[cfg(feature = "rsa_signing")]
+use ring::rand;
 use ring::signature::spki;
 use ring::signature::spki::VerifyWithSPKIError;
 #[cfg(feature = "rsa_signing")]
 use ring::signature;
-#[cfg(feature = "rsa_signing")]
-use ring::rand;
 
 mod common;
 use common::pem;
@@ -355,7 +354,6 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pkc
                                "sha384",
                                "rsa_2048",
                                "sha1");
-// TODO PSS for 3072-8192?
 
 // 8192 bit rsa in 2048_8192 modes
 
