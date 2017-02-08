@@ -51,16 +51,6 @@ fn test_verify_signature_pem(file_name: &str,
                  signature));
 }
 
-macro_rules! test_rsa_sign_verify_spki {
-    ($fn_name:ident, $signing_encoding:expr, $algorithm:expr, $key_id:expr) => {
-        #[cfg(feature = "rsa_signing")]
-        #[test]
-        fn $fn_name() {
-            rsa_sign_and_verify_spki($signing_encoding, $algorithm, $key_id);
-        }
-    }
-}
-
 macro_rules! test_rsa_verify_sig_file_spki {
     ($fn_name:ident,
      $algorithm:expr,
@@ -163,37 +153,6 @@ macro_rules! test_ec_verify_sig_file_spki {
     }
 }
 
-/// Load key pair and sign input, then verify signature with pub key loaded from SPKI DER
-#[cfg(feature = "rsa_signing")]
-fn rsa_sign_and_verify_spki(signing_encoding: &'static signature::RSAEncoding,
-                            algorithm: &spki::Algorithm,
-                            key_id: &str) {
-    let key_pair_der = read_file_completely(Path::new(&format!("tests/test-data/keys/{}.der", key_id)));
-    let key_pair = signature::RSAKeyPair::from_der(untrusted::Input::from(&key_pair_der)).unwrap();
-
-    // Create a signing state.
-    let key_pair = std::sync::Arc::new(key_pair);
-    let mut signing_state = signature::RSASigningState::new(key_pair).unwrap();
-
-    // Generate signature
-    let input = read_file_completely(Path::new("tests/test-data/messages/msg1.bin"));
-    let rng = rand::SystemRandom::new();
-    let mut signature = vec![0; signing_state.key_pair().public_modulus_len()];
-    signing_state.sign(signing_encoding, &rng, &input, &mut signature).unwrap();
-
-    // load pub key spki
-    let spki_path = format!("tests/test-data/keys/{}_pub_spki.der", key_id);
-    let spki_bytes = read_file_completely(Path::new(&spki_path));
-    let spki_input = untrusted::Input::from(&spki_bytes);
-
-    // Verify the signature.
-    spki::verify(algorithm,
-                 spki_input,
-                 untrusted::Input::from(&input),
-                 untrusted::Input::from(&signature))
-        .unwrap();
-}
-
 /// Verify signature of input compared with pre-calculated signature loaded from file.
 ///
 /// Allows signature verification with various flavors of right and wrong parameters: using
@@ -291,37 +250,9 @@ fn read_file_completely(path: &Path) -> Vec<u8> {
 }
 
 // TODO sha1 support?
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_sha1,
-//                              &spki::RSA_PKCS1_2048_8192_SHA1,
-//                              "rsa_2048");
 
 // 2048 bit rsa
-// pkcs1
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pkcs1_sha256,
-                          &signature::RSA_PKCS1_SHA256,
-                          &spki::RSA_PKCS1_2048_8192_SHA256,
-                          "rsa_2048");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pkcs1_sha384,
-                          &signature::RSA_PKCS1_SHA384,
-                          &spki::RSA_PKCS1_2048_8192_SHA384,
-                          "rsa_2048");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pkcs1_sha512,
-                          &signature::RSA_PKCS1_SHA512,
-                          &spki::RSA_PKCS1_2048_8192_SHA512,
-                          "rsa_2048");
-// pss
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pss_sha256,
-                          &signature::RSA_PSS_SHA256,
-                          &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-                          "rsa_2048");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pss_sha384,
-                          &signature::RSA_PSS_SHA384,
-                          &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-                          "rsa_2048");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_2048_pss_sha512,
-                          &signature::RSA_PSS_SHA512,
-                          &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-                          "rsa_2048");
+
 // pkcs1
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pkcs1_sha256,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
@@ -368,36 +299,7 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_2048_pss_sha512
                                "sha1");
 
 // 4096 bit rsa in 2048_8192 modes
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha1_2048,
-//                              &signature::RSA_PKCS1_SHA256,
-//                              &spki::RSA_PKCS1_2048_8192_SHA1,
-//                              "rsa_4096");
-// pkcs1
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha256_pkcs1_2048,
-                          &signature::RSA_PKCS1_SHA256,
-                          &spki::RSA_PKCS1_2048_8192_SHA256,
-                          "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_pkcs1_2048,
-                          &signature::RSA_PKCS1_SHA384,
-                          &spki::RSA_PKCS1_2048_8192_SHA384,
-                          "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha512_pkcs1_2048,
-                          &signature::RSA_PKCS1_SHA512,
-                          &spki::RSA_PKCS1_2048_8192_SHA512,
-                          "rsa_4096");
-// pss
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha256_pss_2048,
-                          &signature::RSA_PSS_SHA256,
-                          &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-                          "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_pss_2048,
-                          &signature::RSA_PSS_SHA384,
-                          &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-                          "rsa_4096");
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha512_pss_2048,
-                          &signature::RSA_PSS_SHA512,
-                          &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-                          "rsa_4096");
+
 // pkcs1
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha256_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
@@ -445,10 +347,7 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha512_pss
 
 // 4096 bit rsa in 3072_8192 modes
 // pkcs1
-test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_4096_sha384_pkcs1_3072,
-                          &signature::RSA_PKCS1_SHA384,
-                          &spki::RSA_PKCS1_3072_8192_SHA384,
-                          "rsa_4096");
+
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pkcs1_3072,
                                &spki::RSA_PKCS1_3072_8192_SHA384,
                                "rsa_4096",
@@ -459,19 +358,7 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_4096_sha384_pkc
 // TODO PSS for 3072-8192?
 
 // 8192 bit rsa in 2048_8192 modes
-// TODO loading 8192 key pairs isn't working
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha256_pkcs1_2048,
-//                              &signature::RSA_PKCS1_SHA256,
-//                              &spki::RSA_PKCS1_2048_8192_SHA256,
-//                              "rsa_8192");
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha384_pkcs1_2048,
-//                              &signature::RSA_PKCS1_SHA384,
-//                              &spki::RSA_PKCS1_2048_8192_SHA384,
-//                              "rsa_8192");
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha512_pkcs1_2048,
-//                              &signature::RSA_PKCS1_SHA512,
-//                              &spki::RSA_PKCS1_2048_8192_SHA512,
-//                              "rsa_8192");
+
 // pkcs1
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha256_pkcs1_2048,
                                &spki::RSA_PKCS1_2048_8192_SHA256,
@@ -518,11 +405,7 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha512_pss
                                "sha1");
 
 // 8192 bit rsa in 3072_8192 modes
-//
-//    test_rsa_sign_verify_spki!(test_rsa_sign_verify_spki_rsa_8192_sha384_pkcs1_3072,
-//                              &signature::RSA_PKCS1_SHA384,
-//                              &spki::RSA_PKCS1_3072_8192_SHA384,
-//                              "rsa_8192");
+
 test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_pkcs1_3072,
                                &spki::RSA_PKCS1_3072_8192_SHA384,
                                "rsa_8192",
