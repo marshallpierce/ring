@@ -16,14 +16,11 @@ use der;
 use signature;
 use untrusted;
 
-/// An error that occurs during certificate validation or name validation.
+/// An error that occurs while parsing an SPKI public key.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum VerifyWithSPKIError {
+pub enum ParseSPKIError {
     /// The encoding of some ASN.1 DER-encoded item is invalid.
     BadDER,
-
-    /// The signature is invalid for the given public key.
-    InvalidSignatureForPublicKey,
 
     /// The SignatureAlgorithm does not match the algorithm of the SPKI.
     /// A mismatch could be because of the algorithm (RSA vs DSA, etc) or the
@@ -31,42 +28,48 @@ pub enum VerifyWithSPKIError {
     UnsupportedSignatureAlgorithmForPublicKey,
 }
 
-/// Verifies the signature `signature` of message `msg` with the public key
-/// `spki_public_key` using the algorithm `alg`.
+/// Parse a public key in the DER-encoded ASN.1 `SubjectPublicKeyInfo`
+/// format described in [RFC 5280 Section 4.1], which is a sequence of an
+/// `AlgorithmIdentifier` and the key value.
 ///
-/// `spki_public_key` must be the DER-encoded ASN.1 `SubjectPublicKeyInfo`
-/// described in [RFC 5280 Section 4.1], which is a sequence of an
-/// `AlgorithmIdentifier` and the key value. Use `ring::signature::verify()` for
-/// the case where you have only the encoded key value.
+/// If the `AlgorithmIdentifier` in the SPKI does not match the provided
+/// `signature_alg`, or if the DER encoding is invalid, an error will be
+/// returned.
 ///
-/// [RFC 5280 Section 4.1]: https://tools.ietf.org/html/rfc5280#section-4.1
+/// If the function returns successfully, the `key_value` field in the
+/// resulting `SubjectPublicKeyInfo` struct is suitable for use with
+/// `signature::verify()`.
 ///
 /// A common situation where this encoding is encountered is when using public
 /// keys exported by OpenSSL. If you export an RSA or ECDSA public key from a
 /// keypair with `-pubout` and friends, you will get DER-encoded
 /// `SubjectPublicKeyInfo`.
-pub fn verify(signature_alg: &Algorithm,
-              public_key_spki: untrusted::Input,
-              msg: untrusted::Input,
-              signature: untrusted::Input) -> Result<(), VerifyWithSPKIError> {
-    let unwrapped_spki_der = public_key_spki.read_all(VerifyWithSPKIError::BadDER, |input| {
+///
+/// [RFC 5280 Section 4.1]: https://tools.ietf.org/html/rfc5280#section-4.1
+pub fn parse_spki<'a>(signature_alg: &Algorithm, public_key_spki: untrusted::Input<'a>)
+        -> Result<SubjectPublicKeyInfo<'a>, ParseSPKIError> {
+    let unwrapped_spki_der = try!(public_key_spki.read_all(ParseSPKIError::BadDER, |input| {
         der::expect_tag_and_get_value(input, der::Tag::Sequence)
-            .map_err(|_| VerifyWithSPKIError::BadDER)
-    }).unwrap();
+            .map_err(|_| ParseSPKIError::BadDER)
+    }));
 
     let spki = try!(parse_spki_value(unwrapped_spki_der));
     if !signature_alg.public_key_alg_id
         .matches_algorithm_id_value(spki.algorithm_id_value) {
-        return Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
+        return Err(ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
     }
-    signature::verify(signature_alg.verification_alg, spki.key_value, msg,
-                      signature)
-        .map_err(|_| VerifyWithSPKIError::InvalidSignatureForPublicKey)
+
+    Ok(spki)
 }
 
-struct SubjectPublicKeyInfo<'a> {
-    algorithm_id_value: untrusted::Input<'a>,
-    key_value: untrusted::Input<'a>,
+/// Represents the contents of `SubjectPublicKeyInfo` described in
+/// RFC 5280 Section 4.1: https://tools.ietf.org/html/rfc5280#section-4.1
+#[derive(Debug)]
+pub struct SubjectPublicKeyInfo<'a> {
+    /// The algorithm id ASN.1.
+    pub algorithm_id_value: untrusted::Input<'a>,
+    /// The key ASN.1 bit string.
+    pub key_value: untrusted::Input<'a>,
 }
 
 // Parse the public key into an algorithm OID, an optional curve OID, and the
@@ -74,13 +77,13 @@ struct SubjectPublicKeyInfo<'a> {
 // `PublicKeyAlgorithm` for the `SignatureAlgorithm` that is matched when
 // parsing the signature.
 fn parse_spki_value(input: untrusted::Input)
-                    -> Result<SubjectPublicKeyInfo, VerifyWithSPKIError> {
-    input.read_all(VerifyWithSPKIError::BadDER, |input| {
+                    -> Result<SubjectPublicKeyInfo, ParseSPKIError> {
+    input.read_all(ParseSPKIError::BadDER, |input| {
         let algorithm_id_value =
-        try!(der::expect_tag_and_get_value(input, der::Tag::Sequence)
-            .map_err(|_| VerifyWithSPKIError::BadDER));
+            try!(der::expect_tag_and_get_value(input, der::Tag::Sequence)
+                .map_err(|_| ParseSPKIError::BadDER));
         let key_value = try!(der::bit_string_with_no_unused_bits(input)
-            .map_err(|_| VerifyWithSPKIError::BadDER));
+            .map_err(|_| ParseSPKIError::BadDER));
         Ok(SubjectPublicKeyInfo {
             algorithm_id_value: algorithm_id_value,
             key_value: key_value,
@@ -88,11 +91,12 @@ fn parse_spki_value(input: untrusted::Input)
     })
 }
 
-/// A signature algorithm for use when validating a signature with an SPKI-formatted public key.
+/// Groups an ASN.1 AlgorithmIdentifier and a `ring` VerificationAlgorithm.
 pub struct Algorithm {
     /// The `algorithm` member in SPKI from https://tools.ietf.org/html/rfc5280#section-4.1.
     public_key_alg_id: AlgorithmIdentifier,
-    verification_alg: &'static signature::VerificationAlgorithm,
+    /// The verification algorithm corresponding to the algorithm id.
+    pub verification_alg: &'static signature::VerificationAlgorithm,
 }
 
 /// ECDSA signatures using the P-256 curve and SHA-256.

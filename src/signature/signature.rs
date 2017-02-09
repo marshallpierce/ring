@@ -367,8 +367,8 @@ pub fn verify(alg: &VerificationAlgorithm, public_key: untrusted::Input,
     alg.verify(public_key, msg, signature)
 }
 
-/// Verify a signature with a public key encoded in SPKI format
-/// (https://tools.ietf.org/html/rfc5280#section-4.1)
+/// Parse a public key in SPKI format
+/// (https://tools.ietf.org/html/rfc5280#section-4.1).
 pub mod spki;
 
 #[cfg(test)]

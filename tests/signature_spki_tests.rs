@@ -19,9 +19,9 @@ use std::fs::File;
 use std::io::{BufRead, Read};
 use std::path::Path;
 use std::vec::Vec;
-use ring::der;
+use ring::{der, error, signature};
 use ring::signature::spki;
-use ring::signature::spki::VerifyWithSPKIError;
+use ring::signature::spki::ParseSPKIError;
 
 mod common;
 use common::pem;
@@ -32,6 +32,15 @@ use common::pem;
 // messages, digests, keys, and signatures in various combinations of algorithms generated
 // by the openssl CLI via the `gen-test-signatures.sh` script.
 
+macro_rules! test_parse_bad_spki {
+    ($fn_name:ident, $file_name:expr, $signature_alg:expr, $expected_result:expr) => {
+        #[test]
+        fn $fn_name() {
+            test_parse_bad_spki($file_name, $signature_alg, $expected_result);
+        }
+    }
+}
+
 macro_rules! test_verify_signature_pem {
     ($fn_name:ident, $file_name:expr, $signature_alg:expr, $expected_result:expr) => {
         #[test]
@@ -41,23 +50,34 @@ macro_rules! test_verify_signature_pem {
     }
 }
 
+fn test_parse_bad_spki(file_name: &str,
+                       signature_algorithm: &'static spki::Algorithm,
+                       expected_result: ParseSPKIError) {
+    let tsd = parse_test_signed_data(file_name);
+    let spki_value = untrusted::Input::from(&tsd.spki);
+
+    assert_eq!(expected_result, spki::parse_spki(signature_algorithm, spki_value).unwrap_err());
+}
+
 fn test_verify_signature_pem(file_name: &str,
                              signature_algorithm: &'static spki::Algorithm,
-                             expected_result: Result<(), VerifyWithSPKIError>) {
+                             expected_result: Result<(), error::Unspecified>) {
     let tsd = parse_test_signed_data(file_name);
     let spki_value = untrusted::Input::from(&tsd.spki);
 
     let signature = untrusted::Input::from(&tsd.signature);
-    let signature = signature.read_all(VerifyWithSPKIError::BadDER, |input| {
+    let signature = signature.read_all(ParseSPKIError::BadDER, |input| {
         der::bit_string_with_no_unused_bits(input)
-            .map_err(|_| VerifyWithSPKIError::BadDER)
+            .map_err(|_| ParseSPKIError::BadDER)
     }).unwrap();
 
+    let spki = spki::parse_spki(signature_algorithm, spki_value).unwrap();
+
     assert_eq!(expected_result,
-    spki::verify(signature_algorithm,
-                 spki_value,
-                 untrusted::Input::from(&tsd.data),
-                 signature));
+    signature::verify(signature_algorithm.verification_alg,
+                      spki.key_value,
+                      untrusted::Input::from(&tsd.data),
+                      signature));
 }
 
 macro_rules! test_rsa_verify_sig_file_spki {
@@ -89,7 +109,7 @@ macro_rules! test_rsa_verify_sig_file_spki {
                                                 $digest_alg,
                                                 "msg1",
                                                 "msg2",
-                                                Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                                                Err(error::Unspecified));
 
             // fails when compared to signature file with wrong digest alg
             rsa_verify_signature_file_with_spki($algorithm,
@@ -99,7 +119,7 @@ macro_rules! test_rsa_verify_sig_file_spki {
                                                 $wrong_digest_alg,
                                                 "msg1",
                                                 "msg1",
-                                                Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                                                Err(error::Unspecified));
 
             // fails when compared to signature file with wrong key
             rsa_verify_signature_file_with_spki($algorithm,
@@ -109,7 +129,7 @@ macro_rules! test_rsa_verify_sig_file_spki {
                                                 $digest_alg,
                                                 "msg1",
                                                 "msg1",
-                                                Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                                                Err(error::Unspecified));
         }
     }
 }
@@ -139,7 +159,7 @@ macro_rules! test_ec_verify_sig_file_spki {
                                                $digest_alg,
                                                "msg1",
                                                "msg2",
-                                               Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                                               Err(error::Unspecified));
 
             // fails when compared to signature file with wrong digest alg
             ec_verify_signature_file_with_spki($algorithm,
@@ -148,7 +168,7 @@ macro_rules! test_ec_verify_sig_file_spki {
                                                $wrong_digest_alg,
                                                "msg1",
                                                "msg1",
-                                               Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                                               Err(error::Unspecified));
 
             // fails when compared to signature file with wrong key
             ec_verify_signature_file_with_spki($algorithm,
@@ -157,7 +177,7 @@ macro_rules! test_ec_verify_sig_file_spki {
                                                $digest_alg,
                                                "msg1",
                                                "msg1",
-                                               Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                                               Err(error::Unspecified));
         }
     }
 }
@@ -188,7 +208,7 @@ fn rsa_verify_signature_file_with_spki(algorithm: &spki::Algorithm,
                                        digest_alg: &str,
                                        message_id: &str,
                                        msg_sig_id: &str,
-                                       expected: Result<(), VerifyWithSPKIError>) {
+                                       expected: Result<(), error::Unspecified>) {
     verify_signature_with_spki(algorithm,
                                Path::new(&format!("tests/test-data/messages/{}.bin", message_id)),
                                Path::new(&format!("tests/test-data/signatures/{}_{}_{}_{}_sig.bin",
@@ -222,7 +242,7 @@ fn ec_verify_signature_file_with_spki(algorithm: &spki::Algorithm,
                                       digest_alg: &str,
                                       message_id: &str,
                                       msg_sig_id: &str,
-                                      expected: Result<(), VerifyWithSPKIError>) {
+                                      expected: Result<(), error::Unspecified>) {
     verify_signature_with_spki(algorithm,
                                Path::new(&format!("tests/test-data/messages/{}.bin", message_id)),
                                Path::new(&format!("tests/test-data/signatures/{}_{}_{}_sig.bin",
@@ -237,18 +257,20 @@ fn verify_signature_with_spki(algorithm: &spki::Algorithm,
                               message_path: &Path,
                               sig_path: &Path,
                               spki_path: &Path,
-                              expected: Result<(), VerifyWithSPKIError>) {
+                              expected: Result<(), error::Unspecified>) {
     let input = read_file_completely(message_path);
     let signature = read_file_completely(sig_path);
 
     let spki_bytes = read_file_completely(spki_path);
     let spki_input = untrusted::Input::from(&spki_bytes);
 
+    let spki = spki::parse_spki(algorithm, spki_input).unwrap();
+
     // Verify the signature.
-    assert_eq!(expected, spki::verify(algorithm,
-                                      spki_input,
-                                      untrusted::Input::from(&input),
-                                      untrusted::Input::from(&signature)));
+    assert_eq!(expected, signature::verify(algorithm.verification_alg,
+                                           spki.key_value,
+                                           untrusted::Input::from(&input),
+                                           untrusted::Input::from(&signature)));
 }
 
 fn read_file_completely(path: &Path) -> Vec<u8> {
@@ -427,8 +449,6 @@ test_rsa_verify_sig_file_spki!(test_rsa_verify_sig_file_spki_rsa_8192_sha384_pkc
                                "rsa_2048",
                                "sha1");
 
-
-// TODO ecdsa signing?
 // ecdsa p256
 test_ec_verify_sig_file_spki!(test_ec_verify_sig_file_spki_ecdsa_p256_sha256,
                               &spki::ECDSA_P256_SHA256,
@@ -460,54 +480,52 @@ test_ec_verify_sig_file_spki!(test_ec_verify_sig_file_spki_ecdsa_p384_sha384,
 // XXX: Some of the BadDER tests should have better error codes, maybe?
 
 test_verify_signature_pem!(test_ecdsa_secp384r1_sha256_corrupted_data,
-                         "ecdsa-secp384r1-sha256-corrupted-data.pem",
-                         &spki::ECDSA_P384_SHA256,
-                         Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                           "ecdsa-secp384r1-sha256-corrupted-data.pem",
+                           &spki::ECDSA_P384_SHA256,
+                           Err(error::Unspecified));
 test_verify_signature_pem!(test_ecdsa_secp384r1_sha256,
-                         "ecdsa-secp384r1-sha256.pem",
-                          &spki::ECDSA_P384_SHA256,
-                          Ok(()));
-test_verify_signature_pem!(
-    test_ecdsa_using_rsa_key, "ecdsa-using-rsa-key.pem",
-    &spki::ECDSA_P256_SHA256,
-    Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
+                           "ecdsa-secp384r1-sha256.pem",
+                           &spki::ECDSA_P384_SHA256,
+                           Ok(()));
+test_parse_bad_spki!(test_ecdsa_using_rsa_key, "ecdsa-using-rsa-key.pem",
+                     &spki::ECDSA_P256_SHA256,
+                     ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
 
-test_verify_signature_pem!(test_rsa_pkcs1_sha1_key_params_absent,
-                         "rsa-pkcs1-sha1-key-params-absent.pem",
-                         &spki::RSA_PKCS1_2048_8192_SHA1,
-                         Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
+test_parse_bad_spki!(test_rsa_pkcs1_sha1_key_params_absent,
+                     "rsa-pkcs1-sha1-key-params-absent.pem",
+                     &spki::RSA_PKCS1_2048_8192_SHA1,
+                     ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
 // We only support rsa keys identified as "rsaEncyrption", not rsa pss, so this is really only
 // a test that "rsaEncryption" != "rsassapss", not about params.
-test_verify_signature_pem!( test_rsa_pkcs1_sha1_using_pss_key_no_params,
-    "rsa-pkcs1-sha1-using-pss-key-no-params.pem",
-    &spki::RSA_PKCS1_2048_8192_SHA1,
-    Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
+test_parse_bad_spki!(test_rsa_pkcs1_sha1_using_pss_key_no_params,
+                     "rsa-pkcs1-sha1-using-pss-key-no-params.pem",
+                     &spki::RSA_PKCS1_2048_8192_SHA1,
+                     ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
 // XXX: RSA PKCS#1 with SHA-1 is a supported algorithm, but we only accept
 // 2048-8192 bit keys, and this test file is using a 1024 bit key. Thus,
 // our results differ from Chromium's. TODO: this means we need a 2048+ bit
 // version of this test.
 test_verify_signature_pem!(test_rsa_pkcs1_sha1,
-                       "rsa-pkcs1-sha1.pem",
-                       &spki::RSA_PKCS1_2048_8192_SHA1,
-                       Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                           "rsa-pkcs1-sha1.pem",
+                           &spki::RSA_PKCS1_2048_8192_SHA1,
+                           Err(error::Unspecified));
 // XXX: RSA PKCS#1 with SHA-1 is a supported algorithm, but we only accept
 // 2048-8192 bit keys, and this test file is using a 1024 bit key. Thus,
 // our results differ from Chromium's. TODO: this means we need a 2048+ bit
 // version of this test.
 test_verify_signature_pem!(test_rsa_pkcs1_sha256,
-                       "rsa-pkcs1-sha256.pem",
-                       &spki::RSA_PKCS1_2048_8192_SHA256,
-                       Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+                           "rsa-pkcs1-sha256.pem",
+                           &spki::RSA_PKCS1_2048_8192_SHA256,
+                           Err(error::Unspecified));
 
-test_verify_signature_pem!(test_rsa_pkcs1_sha256_spki_non_null_params,
-                         "rsa-pkcs1-sha256-spki-non-null-params.pem",
-                         &spki::RSA_PKCS1_2048_8192_SHA256,
-                         Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
-test_verify_signature_pem!(
-    test_rsa_pkcs1_sha256_using_id_ea_rsa,
-    "rsa-pkcs1-sha256-using-id-ea-rsa.pem",
-    &spki::RSA_PKCS1_2048_8192_SHA256,
-    Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
+test_parse_bad_spki!(test_rsa_pkcs1_sha256_spki_non_null_params,
+                     "rsa-pkcs1-sha256-spki-non-null-params.pem",
+                     &spki::RSA_PKCS1_2048_8192_SHA256,
+                     ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
+test_parse_bad_spki!(test_rsa_pkcs1_sha256_using_id_ea_rsa,
+                     "rsa-pkcs1-sha256-using-id-ea-rsa.pem",
+                     &spki::RSA_PKCS1_2048_8192_SHA256,
+                     ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
 
 /// Our PSS tests that should work.
 test_verify_signature_pem!(
@@ -529,22 +547,21 @@ test_verify_signature_pem!(
     test_rsa_pss_sha256_salt32_corrupted_data,
     "ours/rsa-pss-sha256-salt32-corrupted-data.pem",
     &spki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-    Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+    Err(error::Unspecified));
 test_verify_signature_pem!(
     test_rsa_pss_sha384_salt48_corrupted_data,
     "ours/rsa-pss-sha384-salt48-corrupted-data.pem",
     &spki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-    Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+    Err(error::Unspecified));
 test_verify_signature_pem!(
     test_rsa_pss_sha512_salt64_corrupted_data,
     "ours/rsa-pss-sha512-salt64-corrupted-data.pem",
     &spki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-    Err(VerifyWithSPKIError::InvalidSignatureForPublicKey));
+    Err(error::Unspecified));
 
-test_verify_signature_pem!(
-    test_rsa_using_ec_key, "rsa-using-ec-key.pem",
-    &spki::RSA_PKCS1_2048_8192_SHA256,
-    Err(VerifyWithSPKIError::UnsupportedSignatureAlgorithmForPublicKey));
+test_parse_bad_spki!(test_rsa_using_ec_key, "rsa-using-ec-key.pem",
+                     &spki::RSA_PKCS1_2048_8192_SHA256,
+                     ParseSPKIError::UnsupportedSignatureAlgorithmForPublicKey);
 test_verify_signature_pem!(test_rsa2048_pkcs1_sha512,
                        "rsa2048-pkcs1-sha512.pem",
                        &spki::RSA_PKCS1_2048_8192_SHA512,
