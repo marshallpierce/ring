@@ -95,6 +95,10 @@ arm-linux-androideabi)
     adb shell mkdir -p /data/`dirname $testfile`
     adb push $testfile /data/$testfile
   done
+  for testfile in `find third-party/chromium -name "*.pem"`; do
+    adb shell mkdir -p /data/`dirname $testfile`
+    adb push $testfile /data/$testfile
+  done
   adb shell mkdir -p /data/third-party/NIST
   adb push third-party/NIST/SHAVS /data/third-party/NIST/SHAVS
   adb shell  'cd /data && ./ring-test' 2>&1 | tee /tmp/ring-test
