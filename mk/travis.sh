@@ -106,7 +106,7 @@ arm-linux-androideabi)
   adb push third-party/NIST/SHAVS /data/third-party/NIST/SHAVS
 
   for test_binary in `find $target_dir -maxdepth 1 -executable -type f`; do
-    adb push $target_dir/$test_binary /data/
+    adb push $test_binary /data/
     test_binary_filename=`basename $test_binary`
     log_file="/tmp/${test_binary_filename}-ring-test.out"
     adb shell  "cd /data && ./$test_binary_filename" 2>&1 | tee $log_file
